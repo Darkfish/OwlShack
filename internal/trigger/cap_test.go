@@ -102,9 +102,52 @@ func TestCAPTrigger_TransientFailureIsRetried(t *testing.T) {
 	}
 }
 
-// The bot editor offers (?m) line-anchored patterns for the CAP enum fields. That only works
-// because matchable puts each field on its own line, which nothing else enforces.
-func TestCAPTrigger_LineAnchoredPatternsMatchOneField(t *testing.T) {
+// The fixture is a *Moderate* alert whose instruction text reads "A Severe Weather Warning ...
+// favourable for severe weather". Matching one regex over every field joined would let a
+// severity:Severe filter through on that prose alone, which is why patterns name a field.
+func TestCAPTrigger_SeverityFilterIgnoresTheWordInProse(t *testing.T) {
+	t.Parallel()
+	alert, err := os.ReadFile("testdata/cap_alert.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(alert), "Severe Weather Warning") {
+		t.Fatal("fixture no longer contains the prose this test turns on")
+	}
+	body := string(alert)
+
+	cases := []struct {
+		name    string
+		pattern string
+		want    bool
+	}{
+		{"its own severity", `severity:^Moderate$`, true},
+		{"a higher severity must not leak through the instruction text", `severity:(?i)severe`, false},
+		{"its urgency", `urgency:^Immediate$`, true},
+		{"its message type", `msgtype:^(Alert|Update)$`, true},
+		{"the word in the field that really holds it", `instruction:(?i)severe weather`, true},
+		{"its event", `event:(?i)rain`, true},
+		{"an event it is not", `event:(?i)tsunami`, false},
+		{"its area", `area:(?i)northland`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			fs := newFeedServer(t)
+			fs.alertBody.Store(&body)
+			match := []string{c.pattern}
+			tr, fired := newTestCAP(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
+			tr.poll(context.Background())
+			fs.publish("wx")
+			tr.poll(context.Background())
+
+			if got := len(*fired) == 1; got != c.want {
+				t.Errorf("pattern %s fired=%v, want %v", c.pattern, got, c.want)
+			}
+		})
+	}
+}
+
+func TestCAPTrigger_FieldsNarrowTogether(t *testing.T) {
 	t.Parallel()
 	alert, err := os.ReadFile("testdata/cap_alert.xml")
 	if err != nil {
@@ -112,28 +155,16 @@ func TestCAPTrigger_LineAnchoredPatternsMatchOneField(t *testing.T) {
 	}
 	body := string(alert)
 
-	cases := []struct {
-		pattern string
-		want    bool
-	}{
-		{`(?m)^Moderate$`, true},          // the fixture's severity
-		{`(?m)^(Extreme|Severe)$`, false}, // a higher-severity filter must not let it through
-		{`(?m)^Immediate$`, true},         // its urgency
-		{`(?m)^(Alert|Update)$`, true},    // its msgType
-		{`(?i)rain`, true},                // free text across event and headline
-		{`(?i)tsunami`, false},
-	}
-	for _, c := range cases {
-		fs := newFeedServer(t)
-		fs.alertBody.Store(&body)
-		match := []string{c.pattern}
-		tr, fired := newTestCAP(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
-		tr.poll(context.Background())
-		fs.publish("wx")
-		tr.poll(context.Background())
+	// Severity holds, area does not: narrowing by both must reject the alert.
+	fs := newFeedServer(t)
+	fs.alertBody.Store(&body)
+	match := []string{`severity:^Moderate$`, `area:(?i)canterbury`}
+	tr, fired := newTestCAP(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
+	tr.poll(context.Background())
+	fs.publish("wx")
+	tr.poll(context.Background())
 
-		if got := len(*fired) == 1; got != c.want {
-			t.Errorf("pattern %s fired=%v, want %v", c.pattern, got, c.want)
-		}
+	if len(*fired) != 0 {
+		t.Fatalf("fired with only one of two fields satisfied")
 	}
 }

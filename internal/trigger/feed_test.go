@@ -177,18 +177,84 @@ func TestFeedPoller_BurstClampedToNewest(t *testing.T) {
 	}
 }
 
-func TestFeedPoller_MatchFilters(t *testing.T) {
+func TestFeedPoller_MatchScopesToOneField(t *testing.T) {
 	t.Parallel()
 	fs := newFeedServer(t)
-	match := []string{`(?i)rain`}
+	match := []string{`title:(?i)rain`}
 	tr, fired := newTestRSS(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
 	tr.poll(context.Background())
 
+	// "summary of Road Closure" is the description; only one item has rain in its *title*.
 	fs.publish("Heavy Rain Warning", "Road Closure")
 	tr.poll(context.Background())
 
 	if got := titlesOf(*fired); len(got) != 1 || got[0] != "Heavy Rain Warning" {
-		t.Fatalf("fired %v, want only the matching item", got)
+		t.Fatalf("fired %v, want only the item whose title matched", got)
+	}
+}
+
+func TestFeedPoller_FieldsAreRequiredTogether(t *testing.T) {
+	t.Parallel()
+	fs := newFeedServer(t)
+	// Both fields must hit: the title says rain, the description must name the region.
+	match := []string{`title:(?i)rain`, `description:(?i)summary of Heavy`}
+	tr, fired := newTestRSS(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
+	tr.poll(context.Background())
+
+	fs.publish("Heavy Rain Warning", "Light Rain Watch")
+	tr.poll(context.Background())
+
+	if got := titlesOf(*fired); len(got) != 1 || got[0] != "Heavy Rain Warning" {
+		t.Fatalf("fired %v, want only the item satisfying both fields", got)
+	}
+}
+
+func TestFeedPoller_PatternsOnOneFieldAreAlternatives(t *testing.T) {
+	t.Parallel()
+	fs := newFeedServer(t)
+	match := []string{`title:(?i)^flood`, `title:(?i)^slip`}
+	tr, fired := newTestRSS(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
+	tr.poll(context.Background())
+
+	fs.publish("Flood Warning", "Slip Closure", "Sunny Day")
+	tr.poll(context.Background())
+
+	if got := titlesOf(*fired); len(got) != 2 {
+		t.Fatalf("fired %v, want both items — two patterns on one field are alternatives, not a contradiction", got)
+	}
+}
+
+func TestFeedPoller_UnknownFieldMatchesNothing(t *testing.T) {
+	t.Parallel()
+	fs := newFeedServer(t)
+	match := []string{`severity:(?i)extreme`} // a CAP field, on an rss trigger
+	tr, fired := newTestRSS(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
+	tr.poll(context.Background())
+
+	fs.publish("Extreme Weather")
+	tr.poll(context.Background())
+
+	if len(*fired) != 0 {
+		t.Fatalf("fired %v on a field the rss decoder does not offer", titlesOf(*fired))
+	}
+}
+
+func TestFeedPoller_CapturesReachTheTemplate(t *testing.T) {
+	t.Parallel()
+	fs := newFeedServer(t)
+	match := []string{`title:(?i)magnitude (?P<mag>[0-9.]+)`}
+	tr, fired := newTestRSS(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
+	tr.poll(context.Background())
+
+	fs.publish("Magnitude 5.2 quake")
+	tr.poll(context.Background())
+
+	if len(*fired) != 1 {
+		t.Fatalf("fired %d events, want 1", len(*fired))
+	}
+	captures, _ := (*fired)[0].Data["Match"].(map[string]string)
+	if captures["mag"] != "5.2" {
+		t.Fatalf("Match.mag = %q, want 5.2", captures["mag"])
 	}
 }
 

@@ -3,6 +3,7 @@ package trigger
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/meshcore-go/OwlShack/internal/config"
 	"github.com/mmcdole/gofeed"
@@ -21,7 +22,7 @@ func NewRSSTrigger(botName string, cfg config.TriggerConfig, log *slog.Logger) (
 }
 
 // decodeEntry is what every feed carries, with no second fetch.
-func decodeEntry(_ context.Context, feed *gofeed.Feed, item *gofeed.Item) (map[string]any, string, error) {
+func decodeEntry(_ context.Context, feed *gofeed.Feed, item *gofeed.Item) (map[string]any, map[string]string, error) {
 	data := map[string]any{
 		"Feed":        feed.Title,
 		"FeedLink":    feed.Link,
@@ -37,7 +38,15 @@ func decodeEntry(_ context.Context, feed *gofeed.Feed, item *gofeed.Item) (map[s
 		// .Item.Enclosures, .Item.Extensions (where an Atom feed's cap: fields land), .Item.Custom.
 		"Item": item,
 	}
-	return data, item.Title + "\n" + item.Description, nil
+	fields := map[string]string{
+		"title":       item.Title,
+		"description": item.Description,
+		"content":     item.Content,
+		"link":        item.Link,
+		"author":      authorName(item),
+		"category":    strings.Join(item.Categories, "\n"),
+	}
+	return data, fields, nil
 }
 
 var _ Trigger = (*RSSTrigger)(nil)

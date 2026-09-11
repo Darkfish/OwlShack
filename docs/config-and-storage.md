@@ -84,8 +84,13 @@ radio/connection change still restarts everything (modem reconnect);
   Templates get flattened conveniences (`.Title`/`.Link` for rss,
   `.Severity`/`.Headline`/`.Areas` for cap) plus the parsed structs themselves:
   `.Item` (`*gofeed.Item`) on both, and `.Alert`/`.Info` (`*cap.Alert`) on cap.
-  Match patterns run against those fields joined one per line, so a CAP filter
-  can pin itself to a single field with `(?m)^(Extreme|Severe)$`.
+  Match patterns on a feed trigger are **field-scoped**, written
+  `<field>:<regex>` (`severity:^(Extreme|Severe)$`). Patterns naming the same
+  field are alternatives; different fields must all match, which is the pairing
+  regex alone cannot express — alternation already says OR inside one field.
+  `config.RSSMatchFields` / `CAPMatchFields` are the vocabulary and
+  `TriggerConfig.Validate` rejects an unscoped or misspelt field rather than
+  compiling it as a bare regex that silently never matches.
 - **DM acceptance is `companions.dm_policy`** (`contacts` | `allowlist` |
   `anyone`, default `contacts`) with `companions.dm_allow` holding the
   allowlist's pubkeys newline-encoded, the same encoding `triggers.contacts`

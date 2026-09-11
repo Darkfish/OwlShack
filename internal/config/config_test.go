@@ -321,6 +321,60 @@ func TestTriggerConfig_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "feed trigger with a field-scoped pattern",
+			trig: TriggerConfig{
+				Type:     "cap",
+				URL:      "https://example.com/cap.atom",
+				Template: "{{.Headline}}",
+				Channels: &ChannelList{{Name: "Public"}},
+				Match:    &[]string{"severity:^(Extreme|Severe)$", "area:(?i)northland"},
+			},
+		},
+		{
+			name: "feed trigger with an unscoped pattern",
+			trig: TriggerConfig{
+				Type:     "cap",
+				URL:      "https://example.com/cap.atom",
+				Template: "{{.Headline}}",
+				Channels: &ChannelList{{Name: "Public"}},
+				Match:    &[]string{"(?i)tsunami"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "feed trigger naming a field that does not exist",
+			trig: TriggerConfig{
+				Type:     "cap",
+				URL:      "https://example.com/cap.atom",
+				Template: "{{.Headline}}",
+				Channels: &ChannelList{{Name: "Public"}},
+				Match:    &[]string{"severty:Extreme"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "feed trigger naming the other type's field",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "https://example.com/feed.xml",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+				Match:    &[]string{"severity:Extreme"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "feed trigger with a bad regex on a good field",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "https://example.com/feed.xml",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+				Match:    &[]string{"title:[unclosed"},
+			},
+			wantErr: true,
+		},
+		{
 			name: "feed trigger with a bad schedule",
 			trig: TriggerConfig{
 				Type:     "rss",

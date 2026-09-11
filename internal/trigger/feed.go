@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -38,8 +37,9 @@ const (
 // a 4xx — so the item is recorded as seen instead of being retried forever.
 var errItemPermanent = errors.New("permanent item failure")
 
-// itemDecoder turns one feed item into template data plus the text match patterns run against.
-type itemDecoder func(ctx context.Context, feed *gofeed.Feed, item *gofeed.Item) (map[string]any, string, error)
+// itemDecoder turns one feed item into template data plus the named pieces of text match patterns
+// run against, one entry per matchable field.
+type itemDecoder func(ctx context.Context, feed *gofeed.Feed, item *gofeed.Item) (data map[string]any, fields map[string]string, err error)
 
 // feedPoller is the polling half shared by RSSTrigger and CAPTrigger: fetch on a schedule,
 // deduplicate, and fire once per item not seen before. What an item *becomes* is the trigger's
@@ -49,7 +49,7 @@ type feedPoller struct {
 	kind     string
 	url      string
 	schedule string
-	patterns []*regexp.Regexp
+	matcher  fieldMatcher
 	parser   *gofeed.Parser
 	client   *http.Client
 	decode   itemDecoder
@@ -71,7 +71,7 @@ func newFeedPoller(kind, botName string, cfg config.TriggerConfig, log *slog.Log
 	if cfg.URL == "" {
 		return nil, fmt.Errorf("%s trigger requires a url", kind)
 	}
-	patterns, err := compilePatterns(cfg.Match)
+	matcher, err := newFieldMatcher(cfg.Match)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func newFeedPoller(kind, botName string, cfg config.TriggerConfig, log *slog.Log
 		kind:     kind,
 		url:      cfg.URL,
 		schedule: schedule,
-		patterns: patterns,
+		matcher:  matcher,
 		parser:   parser,
 		client:   client,
 		log:      log.With("trigger", kind, "url", cfg.URL),
@@ -161,7 +161,7 @@ func (p *feedPoller) poll(ctx context.Context) {
 	sort.Sort(feed) // oldest first, so a backlog goes out in the order it happened
 
 	for _, item := range p.freshItems(feed) {
-		data, matchable, err := p.decode(pollCtx, feed, item)
+		data, fields, err := p.decode(pollCtx, feed, item)
 		if err != nil {
 			// Only a permanent failure is recorded; one that failed once is retried next poll.
 			if errors.Is(err, errItemPermanent) {
@@ -172,10 +172,10 @@ func (p *feedPoller) poll(ctx context.Context) {
 		}
 		p.seen[itemID(item)] = p.polls
 
-		captures := matchCaptures(p.patterns, matchable)
+		captures := p.matcher.match(fields)
 		if captures == nil {
 			p.log.Log(ctx, logging.LevelTrace, "no pattern matched",
-				"item", itemID(item), "patterns", patternStrings(p.patterns))
+				"item", itemID(item), "patterns", p.matcher.describe())
 			continue
 		}
 		data["Match"] = captures

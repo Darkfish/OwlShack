@@ -36,23 +36,23 @@ const capMaxBytes = 4 << 20
 // decodeAlert fetches the alert document a feed item links to and overlays its fields onto the
 // entry's data. The CAP fields win where they collide: a CAP trigger's template is written against
 // the alert, not the entry that announced it.
-func (t *CAPTrigger) decodeAlert(ctx context.Context, feed *gofeed.Feed, item *gofeed.Item) (map[string]any, string, error) {
+func (t *CAPTrigger) decodeAlert(ctx context.Context, feed *gofeed.Feed, item *gofeed.Item) (map[string]any, map[string]string, error) {
 	data, _, err := decodeEntry(ctx, feed, item)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	if item.Link == "" {
-		return nil, "", fmt.Errorf("%w: item has no link to an alert document", errItemPermanent)
+		return nil, nil, fmt.Errorf("%w: item has no link to an alert document", errItemPermanent)
 	}
 
 	alert, err := t.fetchAlert(ctx, item.Link)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	info := primaryInfo(alert)
 	if info == nil {
-		return nil, "", fmt.Errorf("%w: alert %s carries no info block", errItemPermanent, alert.Identifier)
+		return nil, nil, fmt.Errorf("%w: alert %s carries no info block", errItemPermanent, alert.Identifier)
 	}
 
 	areas := make([]string, 0, len(info.Area))
@@ -84,19 +84,21 @@ func (t *CAPTrigger) decodeAlert(ctx context.Context, feed *gofeed.Feed, item *g
 	data["Expires"] = capTime(info.Expires)
 	data["Categories"] = categoryNames(info.Categories)
 
-	matchable := strings.Join([]string{
-		info.Event,
-		deref(info.Headline),
-		deref(info.Description),
-		info.Severity.String(),
-		info.Urgency.String(),
-		info.Certainty.String(),
-		alert.MsgType.String(),
-		alert.Status.String(),
-		strings.Join(areas, ", "),
-	}, "\n")
-
-	return data, matchable, nil
+	fields := map[string]string{
+		"event":       info.Event,
+		"headline":    deref(info.Headline),
+		"description": deref(info.Description),
+		"instruction": deref(info.Instruction),
+		"severity":    info.Severity.String(),
+		"urgency":     info.Urgency.String(),
+		"certainty":   info.Certainty.String(),
+		"msgtype":     alert.MsgType.String(),
+		"status":      alert.Status.String(),
+		"area":        strings.Join(areas, "\n"),
+		"sender":      deref(info.SenderName),
+		"category":    strings.Join(categoryNames(info.Categories), "\n"),
+	}
+	return data, fields, nil
 }
 
 func (t *CAPTrigger) fetchAlert(ctx context.Context, url string) (*cap.Alert, error) {

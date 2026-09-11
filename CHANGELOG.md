@@ -13,7 +13,8 @@ top until tagged.
   document each entry links to and templates against the alert itself
   (`{{.Severity}}`, `{{.Urgency}}`, `{{.Event}}`, `{{.Headline}}`, `{{.Areas}}`, `{{.Expires}}`),
   with the whole decoded tree on `{{.Alert}}` and the parsed feed entry on `{{.Item}}`.
-  Match patterns filter which items fire, running against those same fields one per line.
+  Match patterns filter which items fire and are scoped to a named field (`severity:^Severe$`):
+  patterns on one field are alternatives, different fields must all match.
   Feeds are parsed by `gofeed`, which handles RSS 2.0, Atom and JSON Feed. The poll interval is a
   number and a unit rather than a cron expression, floored at one minute so a bot cannot hammer a
   publisher.

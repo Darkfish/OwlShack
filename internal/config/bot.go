@@ -89,9 +89,16 @@ func (t *TriggerConfig) Validate() error {
 	}
 
 	if t.Match != nil {
-		for _, pattern := range *t.Match {
-			if _, err := regexp.Compile(pattern); err != nil {
-				return fmt.Errorf("invalid match pattern %q: %w", pattern, err)
+		fields := MatchFieldsFor(t.Type)
+		for _, entry := range *t.Match {
+			if fields != nil {
+				if err := validateFieldPattern(entry, fields); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := regexp.Compile(entry); err != nil {
+				return fmt.Errorf("invalid match pattern %q: %w", entry, err)
 			}
 		}
 	}

@@ -82,24 +82,33 @@ const CHAT_REGEX_EXAMPLES: RegexExample[] = [
 ];
 
 const RSS_REGEX_EXAMPLES: RegexExample[] = [
-  { pattern: "(?i)warning", desc: 'title or description mentions "warning"' },
-  { pattern: "(?i)(flood|slip|closure)", desc: "any one of several words" },
-  { pattern: "(?i)^NZ ", desc: 'title starts with "NZ "' },
+  { pattern: "title:(?i)warning", desc: 'the title mentions "warning"' },
   {
-    pattern: "(?i)magnitude (?P<mag>[0-9.]+)",
+    pattern: "title:(?i)(flood|slip|closure)",
+    desc: "any one of several words — alternation is how you say OR",
+  },
+  { pattern: "category:(?i)^alerts$", desc: "one of the item's categories" },
+  {
+    pattern: "title:(?i)magnitude (?P<mag>[0-9.]+)",
     desc: "capture the number as {{.Match.mag}}",
   },
 ];
 
-// Each CAP field is matched on its own line, so (?m)^…$ pins a pattern to one field.
+// Fields must be named, or a severity filter would match the word loose in a description.
 const CAP_REGEX_EXAMPLES: RegexExample[] = [
-  { pattern: "(?m)^(Extreme|Severe)$", desc: "only the two highest severities" },
-  { pattern: "(?m)^Immediate$", desc: "only alerts needing immediate action" },
-  { pattern: "(?m)^(Alert|Update)$", desc: "skip Cancel and Ack messages" },
-  { pattern: "(?i)tsunami", desc: "event, headline or description mentions it" },
   {
-    pattern: "(?i)(?P<area>Northland|Auckland)",
-    desc: "capture the area as {{.Match.area}}",
+    pattern: "severity:^(Extreme|Severe)$",
+    desc: "only the two highest severities",
+  },
+  {
+    pattern: "urgency:^Immediate$",
+    desc: "only alerts needing immediate action",
+  },
+  { pattern: "msgtype:^(Alert|Update)$", desc: "skip Cancel and Ack messages" },
+  { pattern: "event:(?i)tsunami", desc: "the alert is about a tsunami" },
+  {
+    pattern: "area:(?i)(?P<area>Northland|Auckland)",
+    desc: "capture the region as {{.Match.area}}",
   },
 ];
 
@@ -110,10 +119,40 @@ const regexExamplesFor = (t: string): RegexExample[] =>
       ? RSS_REGEX_EXAMPLES
       : CHAT_REGEX_EXAMPLES;
 
+// The fields a pattern may name, matching config.RSSMatchFields / CAPMatchFields.
+const RSS_MATCH_FIELDS = [
+  "title",
+  "description",
+  "content",
+  "link",
+  "author",
+  "category",
+];
+const CAP_MATCH_FIELDS = [
+  "event",
+  "headline",
+  "description",
+  "instruction",
+  "severity",
+  "urgency",
+  "certainty",
+  "msgtype",
+  "status",
+  "area",
+  "sender",
+  "category",
+];
+
+const matchFieldsFor = (t: string) =>
+  t === "cap" ? CAP_MATCH_FIELDS : t === "rss" ? RSS_MATCH_FIELDS : undefined;
+
+const fieldOptions = (t: string) =>
+  matchFieldsFor(t)?.map((f) => ({ value: f, label: f }));
+
 // What a pattern is actually run against — different enough per type to be worth spelling out.
 const MATCH_SUBJECT: Record<string, string> = {
-  cap: "Matched against the alert's event, headline, description, severity, urgency, certainty, message type, status and areas — each on its own line.",
-  rss: "Matched against the item's title and description, on separate lines.",
+  cap: "Each pattern applies to one field of the alert. Patterns on the same field are alternatives; different fields must all match.",
+  rss: "Each pattern applies to one field of the item. Patterns on the same field are alternatives; different fields must all match.",
 };
 
 function RegexHelp({ type }: { type: string }) {
@@ -137,15 +176,16 @@ function RegexHelp({ type }: { type: string }) {
             Match pattern examples
           </p>
           <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground/70">
-            {MATCH_SUBJECT[type] ??
-              "Matched against the message text."}{" "}
+            {MATCH_SUBJECT[type] ?? "Matched against the message text."}{" "}
             Patterns match anywhere unless anchored with ^ and $.
           </p>
         </div>
         <div className="divide-y divide-border">
           {regexExamplesFor(type).map((ex) => (
             <div key={ex.pattern} className="px-3 py-2">
-              <code className="font-mono text-xs text-primary">{ex.pattern}</code>
+              <code className="font-mono text-xs text-primary">
+                {ex.pattern}
+              </code>
               <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                 {ex.desc}
               </p>
@@ -279,7 +319,8 @@ export function BotsPage() {
                           {t.type}
                         </span>
                         <span className="font-mono text-xs text-muted-foreground truncate">
-                          {companionName.get(t.companionId) ?? `#${t.companionId}`}
+                          {companionName.get(t.companionId) ??
+                            `#${t.companionId}`}
                         </span>
                         {(t.type === "cron" || isFeedType(t.type)) &&
                           t.schedule && (
@@ -299,11 +340,12 @@ export function BotsPage() {
                             {chNames.join(", ")}
                           </span>
                         )}
-                        {isFeedType(t.type) && (t.contacts?.length ?? 0) > 0 && (
-                          <span className="font-mono text-xs text-muted-foreground/70">
-                            {t.contacts?.length} direct
-                          </span>
-                        )}
+                        {isFeedType(t.type) &&
+                          (t.contacts?.length ?? 0) > 0 && (
+                            <span className="font-mono text-xs text-muted-foreground/70">
+                              {t.contacts?.length} direct
+                            </span>
+                          )}
                       </div>
                       {t.match && t.match.length > 0 && (
                         <div className="font-mono text-xs text-muted-foreground/70 truncate">
@@ -428,6 +470,13 @@ function BotEditor({
     setSelectedChannels([]);
   };
 
+  // A feed's patterns name fields that a chat trigger has none of, and the reverse, so carrying
+  // them across a type change would only produce a save the server rejects.
+  const changeType = (next: string) => {
+    if (isFeedType(next) !== isFeedType(type)) setMatch([]);
+    setType(next);
+  };
+
   const submit = async () => {
     const channelIds = selectedChannels
       .map((n) => nameToId.get(n))
@@ -503,7 +552,7 @@ function BotEditor({
               label="Type"
               value={type}
               options={TYPE_OPTS}
-              onChange={setType}
+              onChange={changeType}
             />
           </div>
 
@@ -604,7 +653,8 @@ function BotEditor({
               label="Match patterns"
               values={match}
               onChange={setMatch}
-              placeholder="(?i)^!bot"
+              prefixOptions={fieldOptions(type)}
+              placeholder={isFeedType(type) ? "(?i)warning" : "(?i)^!bot"}
               addLabel="add pattern"
               emptyHint={
                 type === "dm"
@@ -616,9 +666,9 @@ function BotEditor({
               action={<RegexHelp type={type} />}
               hint={
                 <>
-                  regular expressions — the bot fires when{" "}
-                  {isFeedType(type) ? "an item" : "a message"} matches any
-                  pattern.{" "}
+                  {isFeedType(type)
+                    ? "one regular expression per field — same field means either, different fields must all match. "
+                    : "regular expressions — the bot fires when a message matches any pattern. "}
                   <a
                     href="https://regex101.com/?flavor=golang"
                     target="_blank"
@@ -636,9 +686,9 @@ function BotEditor({
             label="Reply template"
             hint={
               type === "cap"
-                ? "Go template — {{.Event}} {{.Headline}} {{.Severity}} {{.Urgency}} {{.Areas}} {{.Description}} {{.Instruction}} {{.MsgType}}, {{date .Expires \"15:04\"}}; the whole decoded alert is on {{.Alert}} and the feed entry on {{.Item}}"
+                ? 'Go template — {{.Event}} {{.Headline}} {{.Severity}} {{.Urgency}} {{.Areas}} {{.Description}} {{.Instruction}} {{.MsgType}}, {{date .Expires "15:04"}}; the whole decoded alert is on {{.Alert}} and the feed entry on {{.Item}}'
                 : type === "rss"
-                  ? "Go template — {{.Title}} {{.Link}} {{.Description}} {{.Author}} {{.Feed}}, {{date .Published \"15:04\"}}; the whole parsed entry is on {{.Item}}"
+                  ? 'Go template — {{.Title}} {{.Link}} {{.Description}} {{.Author}} {{.Feed}}, {{date .Published "15:04"}}; the whole parsed entry is on {{.Item}}'
                   : "Go template — group/dm: {{.Sender}} {{.Message}} {{.Match}} {{.SNR}} {{.Hops}}; dm also has {{.SenderPubKey}}; cron: {{.Time}}"
             }
           >
