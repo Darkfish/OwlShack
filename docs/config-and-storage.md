@@ -67,7 +67,11 @@ radio/connection change still restarts everything (modem reconnect);
   `TriggerConfig.Validate` parse-checks templates with stubbed trigger funcs
   (`formatPathBytes`) — extend the stubs if the templater gains functions.
 - **Feed triggers (`rss`, `cap`) poll `triggers.url`** on `triggers.schedule`,
-  which unlike `cron` may be blank and then defaults to `@every 5m`. Each new
+  which unlike `cron` may be blank and then defaults to `@every 5m`. The bot
+  editor writes that column as a number and a unit (`@every 15m`) rather than a
+  cron expression, and `validateFeedSchedule` floors any `@every` at one
+  minute — a crontab spec has no seconds field, so a minute is already its
+  finest step and only the descriptor form can ask for less. Each new
   item goes to every channel in `trigger_channels` *and* as a DM to every
   pubkey in `triggers.contacts` — the same column the `dm` type uses to filter
   senders, read here as recipients. At least one of the two is required: with

@@ -290,6 +290,37 @@ func TestTriggerConfig_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "feed trigger polling below the minimum",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "https://example.com/feed.xml",
+				Schedule: "@every 30s",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "feed trigger polling at the minimum",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "https://example.com/feed.xml",
+				Schedule: "@every 1m",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+			},
+		},
+		{
+			name: "feed trigger on a cron spec, whose finest step is already a minute",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "https://example.com/feed.xml",
+				Schedule: "*/15 * * * *",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+			},
+		},
+		{
 			name: "feed trigger with a bad schedule",
 			trig: TriggerConfig{
 				Type:     "rss",

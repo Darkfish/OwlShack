@@ -51,6 +51,21 @@ const TYPE_OPTS = [
 // rss and cap both poll a feed on a schedule; only what they do with an item differs.
 const isFeedType = (t: string) => t === "rss" || t === "cap";
 
+const POLL_UNITS = [
+  { value: "m", label: "minutes" },
+  { value: "h", label: "hours" },
+];
+
+// A feed's poll interval is stored in the same `schedule` column as a cron spec, as the "@every"
+// descriptor cron already understands, so the two fields here round-trip through one string.
+function parsePollInterval(schedule: string | null | undefined) {
+  const m = /^@every (\d+)([mh])$/.exec(schedule ?? "");
+  return m ? { every: m[1], unit: m[2] } : { every: "5", unit: "m" };
+}
+
+// "@every 15m" reads as machinery; "every 15m" reads as English.
+const humanSchedule = (s: string) => s.replace(/^@every /, "every ");
+
 // Practical regex examples for bot authors. Patterns use Go's RE2 engine.
 type RegexExample = { pattern: string; desc: string };
 
@@ -269,7 +284,9 @@ export function BotsPage() {
                         {(t.type === "cron" || isFeedType(t.type)) &&
                           t.schedule && (
                             <code className="font-mono text-xs text-info">
-                              {t.schedule}
+                              {isFeedType(t.type)
+                                ? humanSchedule(t.schedule)
+                                : t.schedule}
                             </code>
                           )}
                         {isFeedType(t.type) && t.url && (
@@ -378,6 +395,9 @@ function BotEditor({
   const [match, setMatch] = useState<string[]>(trigger?.match ?? []);
   const [contacts, setContacts] = useState<string[]>(trigger?.contacts ?? []);
   const [schedule, setSchedule] = useState(trigger?.schedule ?? "");
+  const initialPoll = parsePollInterval(trigger?.schedule);
+  const [pollEvery, setPollEvery] = useState(initialPoll.every);
+  const [pollUnit, setPollUnit] = useState(initialPoll.unit);
   const [url, setUrl] = useState(trigger?.url ?? "");
   const [maxRetries, setMaxRetries] = useState(
     trigger?.maxRetries != null ? String(trigger.maxRetries) : "3",
@@ -428,7 +448,11 @@ function BotEditor({
             (type === "dm" || isFeedType(type)) && senders.length > 0
               ? senders
               : null,
-          schedule: type === "cron" || isFeedType(type) ? schedule : null,
+          schedule: isFeedType(type)
+            ? `@every ${pollEvery.trim()}${pollUnit}`
+            : type === "cron"
+              ? schedule
+              : null,
           url: isFeedType(type) ? url.trim() : null,
           maxRetries: parseInt(maxRetries, 10) || 3,
           retryTimeout: parseInt(retryTimeout, 10) || 5,
@@ -452,6 +476,7 @@ function BotEditor({
       selectedChannels.length > 0 ||
       (isFeedType(type) && contacts.length > 0)) &&
     (type !== "cron" || schedule.trim() !== "") &&
+    (!isFeedType(type) || /^[1-9]\d*$/.test(pollEvery.trim())) &&
     (!isFeedType(type) || /^https?:\/\/\S+$/.test(url.trim()));
 
   return (
@@ -500,20 +525,32 @@ function BotEditor({
             />
           )}
 
-          {(type === "cron" || isFeedType(type)) && (
+          {type === "cron" && (
             <TextField
               label="Schedule"
               value={schedule}
               onChange={setSchedule}
-              placeholder={
-                isFeedType(type) ? "@every 5m" : '"*/30 * * * *" or "@hourly"'
-              }
-              hint={
-                isFeedType(type)
-                  ? "how often to poll — blank polls every 5 minutes"
-                  : "standard 5-field cron"
-              }
+              placeholder='"*/30 * * * *" or "@hourly"'
+              hint="standard 5-field cron"
             />
+          )}
+
+          {isFeedType(type) && (
+            <div className="grid grid-cols-2 gap-4">
+              <TextField
+                label="Check every"
+                type="number"
+                value={pollEvery}
+                onChange={setPollEvery}
+                hint="one minute is the fastest allowed"
+              />
+              <SelectField
+                label="Unit"
+                value={pollUnit}
+                options={POLL_UNITS}
+                onChange={setPollUnit}
+              />
+            </div>
           )}
 
           {type !== "dm" && (

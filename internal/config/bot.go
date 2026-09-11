@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/robfig/cron/v3"
 )
@@ -66,8 +67,8 @@ func (t *TriggerConfig) Validate() error {
 		}
 		// An empty schedule takes the trigger's own default rather than failing here.
 		if t.Schedule != "" {
-			if _, err := cron.ParseStandard(t.Schedule); err != nil {
-				return fmt.Errorf("invalid schedule %q: %w", t.Schedule, err)
+			if err := validateFeedSchedule(t.Schedule); err != nil {
+				return err
 			}
 		}
 	default:
@@ -115,6 +116,30 @@ func (t *TriggerConfig) Validate() error {
 		return fmt.Errorf("pathHashSize must be 0-4")
 	}
 
+	return nil
+}
+
+// MinPollInterval floors how often a feed trigger may poll, so a bot cannot hammer a publisher.
+const MinPollInterval = time.Minute
+
+// validateFeedSchedule accepts anything cron does but floors the interval. A crontab spec has no
+// seconds field, so a minute is already its finest granularity and only an "@every" descriptor
+// can ask for less.
+func validateFeedSchedule(spec string) error {
+	const every = "@every " // the exact prefix cron matches; descriptors are case-sensitive
+	if rest, ok := strings.CutPrefix(spec, every); ok {
+		d, err := time.ParseDuration(rest)
+		if err != nil {
+			return fmt.Errorf("invalid poll interval %q: %w", spec, err)
+		}
+		if d < MinPollInterval {
+			return fmt.Errorf("poll interval %s is below the %s minimum", d, MinPollInterval)
+		}
+		return nil
+	}
+	if _, err := cron.ParseStandard(spec); err != nil {
+		return fmt.Errorf("invalid schedule %q: %w", spec, err)
+	}
 	return nil
 }
 
