@@ -171,6 +171,7 @@ func assembleFromRows(rows *configRows) *config.Config {
 					MaxRetries:         t.MaxRetries,
 					PathHashSize:       intToU8Ptr(t.PathHashSize),
 					Schedule:           ptrToStr(t.Schedule),
+					URL:                t.URL,
 				}
 				if len(t.ChannelIDs) > 0 {
 					cl := make(config.ChannelList, 0, len(t.ChannelIDs))
@@ -456,6 +457,7 @@ func replaceCompanionChildren(ctx context.Context, st *store.Store, companionID 
 			MaxRetries:         tg.MaxRetries,
 			PathHashSize:       u8ToIntPtr(tg.PathHashSize),
 			Schedule:           emptyToNil(tg.Schedule),
+			URL:                tg.URL,
 			ChannelIDs:         chIDs,
 		}
 		if err := st.Triggers.Create(ctx, &tr); err != nil {

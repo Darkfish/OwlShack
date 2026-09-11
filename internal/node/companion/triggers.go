@@ -101,6 +101,10 @@ func (c *Companion) buildTrigger(cfg config.TriggerConfig, channels []*meshcore.
 		t, err = trigger.NewDMTrigger(c.cfg.Name, cfg, c.log)
 	case "cron":
 		t, err = trigger.NewCronTrigger(c.cfg.Name, cfg, c.log)
+	case "rss":
+		t, err = trigger.NewRSSTrigger(c.cfg.Name, cfg, c.log)
+	case "cap":
+		t, err = trigger.NewCAPTrigger(c.cfg.Name, cfg, c.log)
 	default:
 		return nil, fmt.Errorf("unknown trigger type %q", cfg.Type)
 	}
@@ -145,7 +149,7 @@ func (c *Companion) makeCallback(ctx context.Context, entry triggerEntry) trigge
 				c.log.Error("send error", "error", err)
 			}
 
-		case "cron":
+		case "cron", "rss", "cap":
 			for _, ch := range entry.channels {
 				c.log.Debug("sending group txt", "channel", ch.Name, "pathHashSize", hashSize)
 				if err := c.sendGroupReply(ch, rendered, hashSize, retryTimeout, *entry.config.MaxRetries); err != nil {

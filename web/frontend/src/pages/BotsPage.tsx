@@ -44,7 +44,12 @@ const TYPE_OPTS = [
   { value: "group", label: "Group message (match & reply)" },
   { value: "dm", label: "Direct message (match & reply)" },
   { value: "cron", label: "Cron (scheduled broadcast)" },
+  { value: "rss", label: "RSS/Atom feed (new items)" },
+  { value: "cap", label: "CAP alerts (emergency feed)" },
 ];
+
+// rss and cap both poll a feed on a schedule; only what they do with an item differs.
+const isFeedType = (t: string) => t === "rss" || t === "cap";
 
 // Practical regex examples for bot authors. Patterns use Go's RE2 engine.
 const REGEX_EXAMPLES: { pattern: string; desc: string }[] = [
@@ -222,9 +227,15 @@ export function BotsPage() {
                         <span className="font-mono text-xs text-muted-foreground truncate">
                           {companionName.get(t.companionId) ?? `#${t.companionId}`}
                         </span>
-                        {t.type === "cron" && t.schedule && (
-                          <code className="font-mono text-xs text-info">
-                            {t.schedule}
+                        {(t.type === "cron" || isFeedType(t.type)) &&
+                          t.schedule && (
+                            <code className="font-mono text-xs text-info">
+                              {t.schedule}
+                            </code>
+                          )}
+                        {isFeedType(t.type) && t.url && (
+                          <code className="font-mono text-xs text-muted-foreground/70 truncate">
+                            {t.url}
                           </code>
                         )}
                         {chNames.length > 0 && (
@@ -323,6 +334,7 @@ function BotEditor({
   const [match, setMatch] = useState<string[]>(trigger?.match ?? []);
   const [contacts, setContacts] = useState<string[]>(trigger?.contacts ?? []);
   const [schedule, setSchedule] = useState(trigger?.schedule ?? "");
+  const [url, setUrl] = useState(trigger?.url ?? "");
   const [maxRetries, setMaxRetries] = useState(
     trigger?.maxRetries != null ? String(trigger.maxRetries) : "3",
   );
@@ -369,7 +381,8 @@ function BotEditor({
           channelIds,
           match: type !== "cron" && patterns.length > 0 ? patterns : null,
           contacts: type === "dm" && senders.length > 0 ? senders : null,
-          schedule: type === "cron" ? schedule : null,
+          schedule: type === "cron" || isFeedType(type) ? schedule : null,
+          url: isFeedType(type) ? url.trim() : null,
           maxRetries: parseInt(maxRetries, 10) || 3,
           retryTimeout: parseInt(retryTimeout, 10) || 5,
           pathHashSize:
@@ -389,7 +402,8 @@ function BotEditor({
   const valid =
     template.trim() !== "" &&
     (type === "dm" || selectedChannels.length > 0) &&
-    (type !== "cron" || schedule.trim() !== "");
+    (type !== "cron" || schedule.trim() !== "") &&
+    (!isFeedType(type) || /^https?:\/\/\S+$/.test(url.trim()));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -419,13 +433,37 @@ function BotEditor({
             />
           </div>
 
-          {type === "cron" && (
+          {isFeedType(type) && (
+            <TextField
+              label="Feed URL"
+              value={url}
+              onChange={setUrl}
+              placeholder={
+                type === "cap"
+                  ? "https://alerts.metservice.com/cap/atom"
+                  : "https://example.com/feed.xml"
+              }
+              hint={
+                type === "cap"
+                  ? "a CAP feed — each entry links to the alert document, which is fetched and decoded"
+                  : "RSS, Atom or JSON feed"
+              }
+            />
+          )}
+
+          {(type === "cron" || isFeedType(type)) && (
             <TextField
               label="Schedule"
               value={schedule}
               onChange={setSchedule}
-              placeholder='"*/30 * * * *" or "@hourly"'
-              hint="standard 5-field cron"
+              placeholder={
+                isFeedType(type) ? "@every 5m" : '"*/30 * * * *" or "@hourly"'
+              }
+              hint={
+                isFeedType(type)
+                  ? "how often to poll — blank polls every 5 minutes"
+                  : "standard 5-field cron"
+              }
             />
           )}
 
@@ -436,7 +474,7 @@ function BotEditor({
               options={channelOptions}
               onChange={setSelectedChannels}
               hint={
-                type === "cron"
+                type === "cron" || isFeedType(type)
                   ? "broadcast targets — pick from the companion's channels"
                   : "channels to listen on — pick from the companion's channels"
               }
@@ -468,7 +506,9 @@ function BotEditor({
               emptyHint={
                 type === "dm"
                   ? "no patterns: every message from a listed sender fires this bot"
-                  : "no patterns — add one so this bot can fire"
+                  : isFeedType(type)
+                    ? "no patterns: every new item is broadcast"
+                    : "no patterns — add one so this bot can fire"
               }
               action={<RegexHelp />}
               hint={
@@ -490,12 +530,24 @@ function BotEditor({
 
           <Field
             label="Reply template"
-            hint="Go template — group/dm: {{.Sender}} {{.Message}} {{.Match}} {{.SNR}} {{.Hops}}; dm also has {{.SenderPubKey}}; cron: {{.Time}}"
+            hint={
+              type === "cap"
+                ? "Go template — {{.Event}} {{.Headline}} {{.Severity}} {{.Urgency}} {{.Areas}} {{.Description}} {{.Instruction}} {{.MsgType}}, and {{date .Expires \"15:04\"}}"
+                : type === "rss"
+                  ? "Go template — {{.Title}} {{.Link}} {{.Description}} {{.Author}} {{.Feed}}, and {{date .Published \"15:04\"}}"
+                  : "Go template — group/dm: {{.Sender}} {{.Message}} {{.Match}} {{.SNR}} {{.Hops}}; dm also has {{.SenderPubKey}}; cron: {{.Time}}"
+            }
           >
             <Textarea
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
-              placeholder="@[{{.Sender}}] pong"
+              placeholder={
+                type === "cap"
+                  ? "{{.Severity}} {{.Event}}: {{.Headline}} ({{.Areas}})"
+                  : type === "rss"
+                    ? "{{.Title}}"
+                    : "@[{{.Sender}}] pong"
+              }
               rows={3}
               className="resize-none rounded-none border-border font-mono text-sm bg-background"
             />

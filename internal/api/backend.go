@@ -328,6 +328,7 @@ type TriggerInput struct {
 	MaxRetries         *int     `json:"maxRetries"`
 	PathHashSize       *int     `json:"pathHashSize"`
 	Schedule           *string  `json:"schedule"`
+	URL                string   `json:"url"`
 }
 
 // BackupFile is a generated backup ready to stream to the browser.

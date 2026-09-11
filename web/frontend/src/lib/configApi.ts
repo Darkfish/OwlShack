@@ -141,6 +141,7 @@ export interface Trigger {
   maxRetries: number | null;
   pathHashSize: number | null;
   schedule: string | null;
+  url: string;
 }
 
 // The single repeater NODE (the relay we run), not a remote one being administered.
@@ -332,6 +333,7 @@ export interface TriggerInput {
   maxRetries?: number | null;
   pathHashSize?: number | null;
   schedule?: string | null;
+  url?: string | null;
 }
 
 // --- request helper ---

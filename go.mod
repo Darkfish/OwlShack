@@ -17,6 +17,12 @@ require (
 require github.com/meshcore-go/meshcore-go/hardware/sx12xx v1.4.0
 
 require (
+	github.com/mmcdole/gofeed v1.4.2 // indirect
+	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
+)
+
+require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect

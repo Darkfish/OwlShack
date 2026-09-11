@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"text/template"
@@ -27,6 +28,8 @@ type TriggerConfig struct {
 	PathHashSize *uint8 `json:"pathHashSize,omitempty" yaml:"pathHashSize,omitempty" toml:"pathHashSize,omitempty"`
 
 	Schedule string `json:"schedule,omitempty" yaml:"schedule,omitempty" toml:"schedule,omitempty"`
+
+	URL string `json:"url,omitempty" yaml:"url,omitempty" toml:"url,omitempty"` // Feed to poll, for rss and cap triggers
 }
 
 // Validate rejects trigger configs that would fail companion construction, which after a reload exits the process.
@@ -45,8 +48,29 @@ func (t *TriggerConfig) Validate() error {
 		}
 	case "dm":
 		// No channel or contact is required: an empty contact list listens to every sender the DM policy already let through.
+	case "rss", "cap":
+		if t.URL == "" {
+			return fmt.Errorf("%s trigger requires a url", t.Type)
+		}
+		u, err := url.Parse(t.URL)
+		if err != nil {
+			return fmt.Errorf("invalid url %q: %w", t.URL, err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("url %q must be http or https", t.URL)
+		}
+		// A feed trigger has nowhere else to deliver, so no channel means it can never say anything.
+		if t.Channels == nil || len(*t.Channels) == 0 {
+			return fmt.Errorf("%s trigger requires at least one channel", t.Type)
+		}
+		// An empty schedule takes the trigger's own default rather than failing here.
+		if t.Schedule != "" {
+			if _, err := cron.ParseStandard(t.Schedule); err != nil {
+				return fmt.Errorf("invalid schedule %q: %w", t.Schedule, err)
+			}
+		}
 	default:
-		return fmt.Errorf("unknown trigger type %q (supported: group, dm, cron)", t.Type)
+		return fmt.Errorf("unknown trigger type %q (supported: group, dm, cron, rss, cap)", t.Type)
 	}
 
 	if t.Template == "" {
