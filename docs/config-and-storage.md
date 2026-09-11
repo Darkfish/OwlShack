@@ -67,9 +67,11 @@ radio/connection change still restarts everything (modem reconnect);
   `TriggerConfig.Validate` parse-checks templates with stubbed trigger funcs
   (`formatPathBytes`) — extend the stubs if the templater gains functions.
 - **Feed triggers (`rss`, `cap`) poll `triggers.url`** on `triggers.schedule`,
-  which unlike `cron` may be blank and then defaults to `@every 5m`. Both
-  require at least one channel: a feed trigger has nowhere else to deliver, so
-  no channel means it can never say anything. The first poll after a start only
+  which unlike `cron` may be blank and then defaults to `@every 5m`. Each new
+  item goes to every channel in `trigger_channels` *and* as a DM to every
+  pubkey in `triggers.contacts` — the same column the `dm` type uses to filter
+  senders, read here as recipients. At least one of the two is required: with
+  neither, the trigger can never say anything. The first poll after a start only
   records what is already published, so a restart never replays a backlog onto
   the mesh, and one poll sends at most five items — a feed that republishes
   itself would otherwise queue dozens of transmissions onto a duty-cycled

@@ -8,7 +8,7 @@ top until tagged.
 ### Added
 
 - **RSS/Atom and CAP triggers.** Two new bot types poll a feed on a schedule and broadcast each
-  new item to the companion's channels. `rss` templates against the feed entry
+  new item — to the companion's channels, as a DM to a list of contacts, or both. `rss` templates against the feed entry
   (`{{.Title}}`, `{{.Link}}`, `{{.Description}}`, `{{.Published}}`); `cap` fetches the alert
   document each entry links to and templates against the alert itself
   (`{{.Severity}}`, `{{.Urgency}}`, `{{.Event}}`, `{{.Headline}}`, `{{.Areas}}`, `{{.Expires}}`),

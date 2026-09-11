@@ -243,6 +243,11 @@ export function BotsPage() {
                             {chNames.join(", ")}
                           </span>
                         )}
+                        {isFeedType(t.type) && (t.contacts?.length ?? 0) > 0 && (
+                          <span className="font-mono text-xs text-muted-foreground/70">
+                            {t.contacts?.length} direct
+                          </span>
+                        )}
                       </div>
                       {t.match && t.match.length > 0 && (
                         <div className="font-mono text-xs text-muted-foreground/70 truncate">
@@ -380,7 +385,10 @@ function BotEditor({
           template,
           channelIds,
           match: type !== "cron" && patterns.length > 0 ? patterns : null,
-          contacts: type === "dm" && senders.length > 0 ? senders : null,
+          contacts:
+            (type === "dm" || isFeedType(type)) && senders.length > 0
+              ? senders
+              : null,
           schedule: type === "cron" || isFeedType(type) ? schedule : null,
           url: isFeedType(type) ? url.trim() : null,
           maxRetries: parseInt(maxRetries, 10) || 3,
@@ -401,7 +409,9 @@ function BotEditor({
 
   const valid =
     template.trim() !== "" &&
-    (type === "dm" || selectedChannels.length > 0) &&
+    (type === "dm" ||
+      selectedChannels.length > 0 ||
+      (isFeedType(type) && contacts.length > 0)) &&
     (type !== "cron" || schedule.trim() !== "") &&
     (!isFeedType(type) || /^https?:\/\/\S+$/.test(url.trim()));
 
@@ -474,9 +484,11 @@ function BotEditor({
               options={channelOptions}
               onChange={setSelectedChannels}
               hint={
-                type === "cron" || isFeedType(type)
+                type === "cron"
                   ? "broadcast targets — pick from the companion's channels"
-                  : "channels to listen on — pick from the companion's channels"
+                  : isFeedType(type)
+                    ? "broadcast targets — leave empty to send only to the contacts below"
+                    : "channels to listen on — pick from the companion's channels"
               }
             />
           )}
@@ -493,6 +505,21 @@ function BotEditor({
               dialogTitle="Add contact"
               dialogDescription="Pick who this bot answers. Only companions are listed: a repeater, room server or sensor never sends a plain DM."
               idPrefix="dm-sender"
+            />
+          )}
+
+          {isFeedType(type) && (
+            <PeerListField
+              label="Send direct to (optional)"
+              values={contacts}
+              onChange={setContacts}
+              peers={peers}
+              addLabel="add recipient"
+              emptyHint="no recipients: this bot only posts to the channels above"
+              hint="each new item is also sent as a DM to everyone listed"
+              dialogTitle="Add recipient"
+              dialogDescription="Pick who receives each new item as a direct message."
+              idPrefix="feed-recipient"
             />
           )}
 

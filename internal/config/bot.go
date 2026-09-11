@@ -59,9 +59,10 @@ func (t *TriggerConfig) Validate() error {
 		if u.Scheme != "http" && u.Scheme != "https" {
 			return fmt.Errorf("url %q must be http or https", t.URL)
 		}
-		// A feed trigger has nowhere else to deliver, so no channel means it can never say anything.
-		if t.Channels == nil || len(*t.Channels) == 0 {
-			return fmt.Errorf("%s trigger requires at least one channel", t.Type)
+		// A feed trigger answers nobody, so with neither a channel nor a contact it can never
+		// say anything.
+		if (t.Channels == nil || len(*t.Channels) == 0) && (t.Contacts == nil || len(*t.Contacts) == 0) {
+			return fmt.Errorf("%s trigger requires at least one channel or contact", t.Type)
 		}
 		// An empty schedule takes the trigger's own default rather than failing here.
 		if t.Schedule != "" {

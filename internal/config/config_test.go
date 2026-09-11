@@ -244,6 +244,63 @@ func TestTriggerConfig_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "valid rss trigger to a channel",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "https://example.com/feed.xml",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+			},
+		},
+		{
+			name: "valid cap trigger to a contact only",
+			trig: TriggerConfig{
+				Type:     "cap",
+				URL:      "https://example.com/cap.atom",
+				Template: "{{.Headline}}",
+				Contacts: &[]string{"aabbccdd"},
+			},
+		},
+		{
+			name: "feed trigger with no url",
+			trig: TriggerConfig{
+				Type:     "rss",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "feed trigger with a non-http url",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "file:///etc/passwd",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "feed trigger with nowhere to deliver",
+			trig: TriggerConfig{
+				Type:     "cap",
+				URL:      "https://example.com/cap.atom",
+				Template: "{{.Headline}}",
+			},
+			wantErr: true,
+		},
+		{
+			name: "feed trigger with a bad schedule",
+			trig: TriggerConfig{
+				Type:     "rss",
+				URL:      "https://example.com/feed.xml",
+				Schedule: "not a cron",
+				Template: "{{.Title}}",
+				Channels: &ChannelList{{Name: "Public"}},
+			},
+			wantErr: true,
+		},
+		{
 			name: "template using formatPathBytes stub func parses",
 			trig: TriggerConfig{
 				Type:     "group",

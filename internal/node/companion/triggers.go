@@ -3,6 +3,7 @@ package companion
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	meshcore "github.com/meshcore-go/meshcore-go"
@@ -119,6 +120,21 @@ func (c *Companion) buildTrigger(cfg config.TriggerConfig, channels []*meshcore.
 	}, nil
 }
 
+// triggerContacts is the pubkeys a broadcasting trigger DMs, in the same lowercase hex form the
+// DM trigger matches senders on.
+func triggerContacts(cfg config.TriggerConfig) []string {
+	if cfg.Contacts == nil {
+		return nil
+	}
+	var out []string
+	for _, c := range *cfg.Contacts {
+		if c = strings.ToLower(strings.TrimSpace(c)); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 func (c *Companion) makeCallback(ctx context.Context, entry triggerEntry) trigger.Callback {
 	return func(evt trigger.Event) {
 		rendered, err := c.templater.Render(&evt, entry.config.Template)
@@ -149,11 +165,19 @@ func (c *Companion) makeCallback(ctx context.Context, entry triggerEntry) trigge
 				c.log.Error("send error", "error", err)
 			}
 
+		// A trigger with no incoming message to answer broadcasts instead, to every channel and
+		// every contact it was configured with.
 		case "cron", "rss", "cap":
 			for _, ch := range entry.channels {
 				c.log.Debug("sending group txt", "channel", ch.Name, "pathHashSize", hashSize)
 				if err := c.sendGroupReply(ch, rendered, hashSize, retryTimeout, *entry.config.MaxRetries); err != nil {
 					c.log.Error("send error", "error", err)
+				}
+			}
+			for _, pubkey := range triggerContacts(entry.config) {
+				c.log.Debug("sending dm", "peer", pubkey, "pathHashSize", hashSize)
+				if err := c.sendDMReply(pubkey, rendered, hashSize, retryTimeout); err != nil {
+					c.log.Error("send error", "peer", pubkey, "error", err)
 				}
 			}
 		}
