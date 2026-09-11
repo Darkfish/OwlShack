@@ -12,7 +12,8 @@ top until tagged.
   (`{{.Title}}`, `{{.Link}}`, `{{.Description}}`, `{{.Published}}`); `cap` fetches the alert
   document each entry links to and templates against the alert itself
   (`{{.Severity}}`, `{{.Urgency}}`, `{{.Event}}`, `{{.Headline}}`, `{{.Areas}}`, `{{.Expires}}`),
-  with the whole decoded tree on `{{.Alert}}`. Match patterns filter which items fire.
+  with the whole decoded tree on `{{.Alert}}` and the parsed feed entry on `{{.Item}}`.
+  Match patterns filter which items fire, running against those same fields one per line.
   Feeds are parsed by `gofeed`, which handles RSS 2.0, Atom and JSON Feed.
 
   Two behaviours matter on a radio: the first poll after a start only *records* what is already

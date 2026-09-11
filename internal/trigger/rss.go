@@ -33,6 +33,9 @@ func decodeEntry(_ context.Context, feed *gofeed.Feed, item *gofeed.Item) (map[s
 		"Author":      authorName(item),
 		"Categories":  item.Categories,
 		"Published":   itemTime(item),
+		// The parsed item itself, for anything the convenience keys above do not flatten —
+		// .Item.Enclosures, .Item.Extensions (where an Atom feed's cap: fields land), .Item.Custom.
+		"Item": item,
 	}
 	return data, item.Title + "\n" + item.Description, nil
 }

@@ -99,6 +99,11 @@ func asTime(value any) (time.Time, error) {
 	switch v := value.(type) {
 	case time.Time:
 		return v, nil
+	case *time.Time: // gofeed's own parsed timestamps, reachable through .Item
+		if v == nil {
+			return time.Time{}, nil
+		}
+		return *v, nil
 	case uint32:
 		return unixOrZero(int64(v)), nil
 	case int64:

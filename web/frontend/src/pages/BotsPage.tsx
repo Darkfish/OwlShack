@@ -52,7 +52,9 @@ const TYPE_OPTS = [
 const isFeedType = (t: string) => t === "rss" || t === "cap";
 
 // Practical regex examples for bot authors. Patterns use Go's RE2 engine.
-const REGEX_EXAMPLES: { pattern: string; desc: string }[] = [
+type RegexExample = { pattern: string; desc: string };
+
+const CHAT_REGEX_EXAMPLES: RegexExample[] = [
   { pattern: "(?i)^!bot$", desc: 'exactly "!bot", any case (not "!bottle")' },
   { pattern: "(?i)^ping", desc: 'starts with "ping" — "Ping", "ping me!"' },
   { pattern: "(?i)\\bweather\\b", desc: 'the whole word "weather" anywhere' },
@@ -64,7 +66,42 @@ const REGEX_EXAMPLES: { pattern: string; desc: string }[] = [
   },
 ];
 
-function RegexHelp() {
+const RSS_REGEX_EXAMPLES: RegexExample[] = [
+  { pattern: "(?i)warning", desc: 'title or description mentions "warning"' },
+  { pattern: "(?i)(flood|slip|closure)", desc: "any one of several words" },
+  { pattern: "(?i)^NZ ", desc: 'title starts with "NZ "' },
+  {
+    pattern: "(?i)magnitude (?P<mag>[0-9.]+)",
+    desc: "capture the number as {{.Match.mag}}",
+  },
+];
+
+// Each CAP field is matched on its own line, so (?m)^…$ pins a pattern to one field.
+const CAP_REGEX_EXAMPLES: RegexExample[] = [
+  { pattern: "(?m)^(Extreme|Severe)$", desc: "only the two highest severities" },
+  { pattern: "(?m)^Immediate$", desc: "only alerts needing immediate action" },
+  { pattern: "(?m)^(Alert|Update)$", desc: "skip Cancel and Ack messages" },
+  { pattern: "(?i)tsunami", desc: "event, headline or description mentions it" },
+  {
+    pattern: "(?i)(?P<area>Northland|Auckland)",
+    desc: "capture the area as {{.Match.area}}",
+  },
+];
+
+const regexExamplesFor = (t: string): RegexExample[] =>
+  t === "cap"
+    ? CAP_REGEX_EXAMPLES
+    : t === "rss"
+      ? RSS_REGEX_EXAMPLES
+      : CHAT_REGEX_EXAMPLES;
+
+// What a pattern is actually run against — different enough per type to be worth spelling out.
+const MATCH_SUBJECT: Record<string, string> = {
+  cap: "Matched against the alert's event, headline, description, severity, urgency, certainty, message type, status and areas — each on its own line.",
+  rss: "Matched against the item's title and description, on separate lines.",
+};
+
+function RegexHelp({ type }: { type: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -85,12 +122,13 @@ function RegexHelp() {
             Match pattern examples
           </p>
           <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground/70">
-            Patterns are regular expressions. They match anywhere in the message
-            unless you anchor with ^ (start) and $ (end).
+            {MATCH_SUBJECT[type] ??
+              "Matched against the message text."}{" "}
+            Patterns match anywhere unless anchored with ^ and $.
           </p>
         </div>
         <div className="divide-y divide-border">
-          {REGEX_EXAMPLES.map((ex) => (
+          {regexExamplesFor(type).map((ex) => (
             <div key={ex.pattern} className="px-3 py-2">
               <code className="font-mono text-xs text-primary">{ex.pattern}</code>
               <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
@@ -101,7 +139,8 @@ function RegexHelp() {
         </div>
         <div className="space-y-1.5 border-t border-border px-3 py-2">
           <p className="font-mono text-[10px] leading-relaxed text-muted-foreground/70">
-            (?i) ignore case · \b word boundary · .* any text · (a|b) a or b
+            (?i) ignore case · (?m) ^ and $ match each line · \b word boundary ·
+            (a|b) a or b
           </p>
           <a
             href="https://regex101.com/?flavor=golang"
@@ -537,10 +576,11 @@ function BotEditor({
                     ? "no patterns: every new item is broadcast"
                     : "no patterns — add one so this bot can fire"
               }
-              action={<RegexHelp />}
+              action={<RegexHelp type={type} />}
               hint={
                 <>
-                  regular expressions — the bot fires when a message matches any
+                  regular expressions — the bot fires when{" "}
+                  {isFeedType(type) ? "an item" : "a message"} matches any
                   pattern.{" "}
                   <a
                     href="https://regex101.com/?flavor=golang"
@@ -559,9 +599,9 @@ function BotEditor({
             label="Reply template"
             hint={
               type === "cap"
-                ? "Go template — {{.Event}} {{.Headline}} {{.Severity}} {{.Urgency}} {{.Areas}} {{.Description}} {{.Instruction}} {{.MsgType}}, and {{date .Expires \"15:04\"}}"
+                ? "Go template — {{.Event}} {{.Headline}} {{.Severity}} {{.Urgency}} {{.Areas}} {{.Description}} {{.Instruction}} {{.MsgType}}, {{date .Expires \"15:04\"}}; the whole decoded alert is on {{.Alert}} and the feed entry on {{.Item}}"
                 : type === "rss"
-                  ? "Go template — {{.Title}} {{.Link}} {{.Description}} {{.Author}} {{.Feed}}, and {{date .Published \"15:04\"}}"
+                  ? "Go template — {{.Title}} {{.Link}} {{.Description}} {{.Author}} {{.Feed}}, {{date .Published \"15:04\"}}; the whole parsed entry is on {{.Item}}"
                   : "Go template — group/dm: {{.Sender}} {{.Message}} {{.Match}} {{.SNR}} {{.Hops}}; dm also has {{.SenderPubKey}}; cron: {{.Time}}"
             }
           >

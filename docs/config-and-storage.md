@@ -77,6 +77,11 @@ radio/connection change still restarts everything (modem reconnect);
   itself would otherwise queue dozens of transmissions onto a duty-cycled
   radio. A `cap` trigger fetches the alert document each entry links to; a 4xx
   or unparseable document is recorded as seen rather than refetched every poll.
+  Templates get flattened conveniences (`.Title`/`.Link` for rss,
+  `.Severity`/`.Headline`/`.Areas` for cap) plus the parsed structs themselves:
+  `.Item` (`*gofeed.Item`) on both, and `.Alert`/`.Info` (`*cap.Alert`) on cap.
+  Match patterns run against those fields joined one per line, so a CAP filter
+  can pin itself to a single field with `(?m)^(Extreme|Severe)$`.
 - **DM acceptance is `companions.dm_policy`** (`contacts` | `allowlist` |
   `anyone`, default `contacts`) with `companions.dm_allow` holding the
   allowlist's pubkeys newline-encoded, the same encoding `triggers.contacts`

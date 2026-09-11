@@ -101,3 +101,39 @@ func TestCAPTrigger_TransientFailureIsRetried(t *testing.T) {
 		t.Fatalf("fired %d events once the publisher recovered, want 1", len(*fired))
 	}
 }
+
+// The bot editor offers (?m) line-anchored patterns for the CAP enum fields. That only works
+// because matchable puts each field on its own line, which nothing else enforces.
+func TestCAPTrigger_LineAnchoredPatternsMatchOneField(t *testing.T) {
+	t.Parallel()
+	alert, err := os.ReadFile("testdata/cap_alert.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(alert)
+
+	cases := []struct {
+		pattern string
+		want    bool
+	}{
+		{`(?m)^Moderate$`, true},          // the fixture's severity
+		{`(?m)^(Extreme|Severe)$`, false}, // a higher-severity filter must not let it through
+		{`(?m)^Immediate$`, true},         // its urgency
+		{`(?m)^(Alert|Update)$`, true},    // its msgType
+		{`(?i)rain`, true},                // free text across event and headline
+		{`(?i)tsunami`, false},
+	}
+	for _, c := range cases {
+		fs := newFeedServer(t)
+		fs.alertBody.Store(&body)
+		match := []string{c.pattern}
+		tr, fired := newTestCAP(t, config.TriggerConfig{URL: fs.feedURL(), Match: &match})
+		tr.poll(context.Background())
+		fs.publish("wx")
+		tr.poll(context.Background())
+
+		if got := len(*fired) == 1; got != c.want {
+			t.Errorf("pattern %s fired=%v, want %v", c.pattern, got, c.want)
+		}
+	}
+}
