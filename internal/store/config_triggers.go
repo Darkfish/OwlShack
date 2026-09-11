@@ -146,7 +146,7 @@ func (r *TriggerRepo) Create(ctx context.Context, t *Trigger) error {
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO triggers
 			(companion_id, type, template, char_limit_behaviour, match_patterns, contacts, retry_timeout, max_retries, path_hash_size, schedule, url)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.CompanionID, t.Type, t.Template, t.CharLimitBehaviour,
 		encodeList(t.MatchPatterns), encodeList(t.Contacts),
 		t.RetryTimeout, t.MaxRetries, t.PathHashSize, t.Schedule, t.URL)

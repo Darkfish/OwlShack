@@ -42,6 +42,7 @@ func mkCompanion(t *testing.T, st *Store, name string) int64 {
 func f64(v float64) *float64 { return &v }
 func i8(v int8) *int8        { return &v }
 func iptr(v int) *int        { return &v }
+func i64ptr(v int64) *int64  { return &v }
 func sptr(v string) *string  { return &v }
 
 func TestMessageRepo_InsertRoundTrip(t *testing.T) {
