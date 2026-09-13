@@ -7,9 +7,7 @@ import (
 	"github.com/meshcore-go/OwlShack/internal/api"
 )
 
-// radioActivity records when the radio last carried traffic. It is process-scoped rather than a
-// field on backend, because a reload installs a new backend and the radio's history does not stop
-// at that boundary. Zero means "not since this process started", which is not the same as "never".
+// radioActivity is process-scoped, not a backend field: a reload swaps the backend but the radio's history carries on. 0 = none since start.
 type radioActivity struct{ lastRx, lastTx atomic.Int64 }
 
 func (a *radioActivity) rx() { a.lastRx.Store(time.Now().UnixNano()) }
@@ -18,8 +16,7 @@ func (a *radioActivity) tx() { a.lastTx.Store(time.Now().UnixNano()) }
 // radioSeen is written by the packet logger, which sees every frame in both directions.
 var radioSeen radioActivity
 
-// secsSinceTime is secsSince for a time.Time. A zero time.Time does not have a zero UnixNano — it
-// is a large negative number — so the emptiness test has to be IsZero, not the nanos.
+// secsSinceTime tests IsZero, not UnixNano: a zero time.Time's nanos are a large negative number, not 0.
 func secsSinceTime(t, now time.Time) *int64 {
 	if t.IsZero() {
 		return nil
@@ -28,8 +25,7 @@ func secsSinceTime(t, now time.Time) *int64 {
 	return &secs
 }
 
-// secsSince renders an age for the wire, nil where there is nothing to measure from, so a monitor
-// can tell a silent radio from one that cannot be asked.
+// secsSince is nil where there is nothing to measure from, so "silent" and "cannot be asked" stay distinct.
 func secsSince(nanos int64, now time.Time) *int64 {
 	if nanos == 0 {
 		return nil
@@ -42,8 +38,7 @@ func (b *backend) Health() api.HealthInfo {
 	return b.health(time.Now(), &radioSeen)
 }
 
-// health composes the snapshot. now and act are parameters so a test can drive both without a
-// clock or a radio.
+// health takes now and act so a test can drive both without a clock or a radio.
 func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 	info := api.HealthInfo{
 		Problems: []string{},
@@ -57,9 +52,7 @@ func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 			WriteQueueLen: queued, WriteQueueCap: capacity, WritesDropped: dropped,
 			WritesDroppedLastSecs: secsSinceTime(lastDrop, now),
 		}
-		// Deliberately not a problem: the count never resets, so flagging it would pin this endpoint
-		// to "degraded" for the life of the process after one transient overflow. Problems carries
-		// current state; a past loss is reported as an age for the operator to threshold.
+		// Not a problem entry: the count never resets, so one transient overflow would pin "degraded" until restart.
 	}
 
 	if brokers, ok := b.MqttStatus(); ok {
@@ -89,8 +82,7 @@ func brokerHealth(st api.MqttBrokerStatus, now time.Time) api.BrokerHealth {
 		LastErrorSecs: secsSinceUnix(st.LastErrorTs, now),
 		Published:     st.Published, Dropped: st.Dropped,
 	}
-	// Only meaningful while the connection is up: the timestamp survives a disconnect, and an age
-	// counted from it would read as though the broker were still connected and had been for hours.
+	// The timestamp survives a disconnect; an age from it would claim hours of uptime while down.
 	if st.Connected {
 		h.ConnectedSecs = secsSinceUnix(st.ConnectedTs, now)
 	}
@@ -112,8 +104,7 @@ func (b *backend) radioHealth(now time.Time, act *radioActivity) api.RadioHealth
 		LastTxSecs: secsSince(act.lastTx.Load(), now),
 	}
 
-	// LastReply is the liveness probe's own signal, and only some transports answer a status query
-	// at all; where none can, the field stays null rather than claiming silence.
+	// The liveness probe's own signal; null on a transport that cannot be probed, rather than claiming silence.
 	if lr, ok := b.stats.(interface{ LastReply() time.Time }); ok {
 		if t := lr.LastReply(); !t.IsZero() {
 			secs := int64(now.Sub(t).Seconds())
@@ -121,8 +112,7 @@ func (b *backend) radioHealth(now time.Time, act *radioActivity) api.RadioHealth
 		}
 	}
 
-	// false: never poll the board from here. A monitor hits this endpoint on a schedule, and asking
-	// the radio a question per scrape would put real traffic on the link to answer "are you well".
+	// false: a monitor scrapes on a schedule, and polling the board per scrape puts traffic on the link.
 	stats, ok := b.radioStats(false)
 	if !ok {
 		return h // no modem: everything below would be a zero that reads as healthy

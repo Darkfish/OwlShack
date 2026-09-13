@@ -7,17 +7,13 @@ import (
 	"github.com/meshcore-go/OwlShack/internal/buildinfo"
 )
 
-// handleHealth answers 200 whenever this process is alive, including when the radio is not. A
-// monitor that cannot reach OwlShack at all already fails the request on its own, so spending the
-// status code on a second opinion would only take the choice of what to alert on away from the
-// operator. The body carries the facts to make that choice from.
+// handleHealth is 200 whenever the process is alive: an unreachable OwlShack already fails the request, so the code is not spent on a second opinion.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	var info HealthInfo
 	if b := s.backendRef(); b != nil {
 		info = b.Health()
 	} else {
-		// Up, listening, nothing wired behind it yet — a real state during startup and after a
-		// failed reload, and one a monitor should be able to see rather than read as healthy.
+		// Up but nothing wired yet — real during startup and after a failed reload, and not to be read as healthy.
 		info.Problems = []string{"no backend installed yet"}
 	}
 

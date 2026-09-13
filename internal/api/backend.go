@@ -159,11 +159,7 @@ type DiscoveryState struct {
 	Results       []DiscoveryInfo `json:"results"`
 }
 
-// HealthInfo is the snapshot behind GET /api/health, shaped for an external monitor rather than
-// for a person. It reports and does not judge: the endpoint answers 200 whenever this process is
-// alive — an OwlShack that is down fails the request by itself — and every threshold worth arguing
-// about is left to whoever is watching. Problems holds only binary facts: a thing that is meant to
-// be connected and is not.
+// HealthInfo backs GET /api/health: facts for a monitor to threshold, never verdicts, and 200 whenever the process is alive.
 type HealthInfo struct {
 	Status     string   `json:"status"` // "ok" when Problems is empty, else "degraded"
 	Problems   []string `json:"problems"`
@@ -175,18 +171,14 @@ type HealthInfo struct {
 	Brokers  []BrokerHealth `json:"brokers"`
 }
 
-// RadioHealth keeps apart three things an operator must not confuse: whether the modem is attached
-// at all, whether the board still answers (LastReplySecs, the liveness probe's own signal), and
-// whether the mesh is talking (LastRxSecs). A quiet mesh moves only the last of those, which is why
-// none of them is turned into a verdict here.
+// RadioHealth keeps "modem attached", "board answering" and "mesh talking" apart: a quiet mesh moves only the last.
 type RadioHealth struct {
 	Connected bool   `json:"connected"`
 	Transport string `json:"transport"`
 
-	// Seconds since the board last answered a status query, null where this transport cannot be
-	// probed — so a monitor can tell "not answering" from "cannot say".
+	// Null where this transport cannot be probed, so "not answering" and "cannot say" stay distinct.
 	LastReplySecs *int64 `json:"lastReplySecs"`
-	// Seconds since a packet was heard or sent, null when there has been none since startup.
+	// Null when none since startup.
 	LastRxSecs *int64 `json:"lastRxSecs"`
 	LastTxSecs *int64 `json:"lastTxSecs"`
 
@@ -210,47 +202,26 @@ type RadioHealth struct {
 	MCUTempC   *float64 `json:"mcuTempC,omitempty"`
 }
 
-// DatabaseHealth watches the async write queue rather than pinging for a row. A read ping proves
-// nothing that matters: the failure worth catching is the writer falling behind, where the write is
-// dropped and everything downstream still looks healthy.
-// DatabaseHealth watches the async write queue rather than pinging for a row. A read ping proves
-// nothing that matters: the failure worth catching is the writer falling behind, where the write is
-// dropped and everything downstream still looks healthy.
-//
-// WritesDropped only ever rises, so on its own it cannot tell "failing now" from "had a bad minute
-// last Tuesday" — WritesDroppedLastSecs is the one to threshold, and is null when none has ever
-// been dropped. WriteQueueLen is a point sample of a queue that normally drains in microseconds, so
-// it reads 0 unless the writer is *sustainedly* behind; it will not catch a brief spike.
+// DatabaseHealth watches the write queue, not a ping: a dropped write leaves everything downstream looking healthy.
 type DatabaseHealth struct {
-	WriteQueueLen         int    `json:"writeQueueLen"`
-	WriteQueueCap         int    `json:"writeQueueCap"`
-	WritesDropped         uint64 `json:"writesDropped"`
+	// A point sample of a queue that drains in microseconds: shows sustained backpressure, not a spike.
+	WriteQueueLen int    `json:"writeQueueLen"`
+	WriteQueueCap int    `json:"writeQueueCap"`
+	WritesDropped uint64 `json:"writesDropped"`
+	// The one to threshold: WritesDropped only rises, so it cannot tell "now" from "last Tuesday".
 	WritesDroppedLastSecs *int64 `json:"writesDroppedLastSecs"`
 }
 
-// The running nodes are deliberately not listed. Neither their names nor their peer counts can
-// report a fault: peers are hydrated from SQLite at startup and only grow, so the count reads the
-// same with the antenna unplugged, and a node that fails to start exits the process rather than
-// vanishing from a list. "No node is running at all" is the only state worth saying, and it is said
-// in Problems. Leaving the names out also keeps this endpoint from linking a public hostname to a
-// mesh identity that public maps resolve to coordinates, the same reason the pubkeys went.
+// No node listing on purpose: a name or peer count cannot report a fault (a node that fails to start exits the process), and both resolve to coordinates on public maps.
 
-// BrokerHealth never carries the transport error itself: a paho connect error reads
-// "dial tcp 10.0.0.5:1883: connect: connection refused" and would publish a private broker's
-// address. The full text stays in the log and on /api/mqtt/status, both behind the rest of the API.
-//
-// ConnectedSecs is what catches a broker that is flapping. Connected is sampled, so a broker
-// reconnecting every thirty seconds reads true on almost every scrape; the age resetting to near
-// zero each time is the only way to see it from outside. LastErrorSecs is an age rather than a
-// flag because the observer records the last error it ever saw and never clears it on reconnect —
-// a boolean built from it would stay true for the life of the process after one transient failure.
+// BrokerHealth carries ages, not the transport error (it names the broker's address) and not flags (the observer never clears lastErr, so a bool would latch).
 type BrokerHealth struct {
 	Name      string `json:"name"`
 	Enabled   bool   `json:"enabled"`
 	Connected bool   `json:"connected"`
-	// Seconds since this connection was established, null when not connected.
+	// Null when disconnected. Resetting toward zero on every scrape is how flapping shows; Connected alone reads true.
 	ConnectedSecs *int64 `json:"connectedSecs"`
-	// Seconds since the last error on this broker, null when it has never had one.
+	// Null when it has never erred.
 	LastErrorSecs *int64 `json:"lastErrorSecs"`
 	Published     uint64 `json:"published"`
 	Dropped       uint64 `json:"dropped"`
