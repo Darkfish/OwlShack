@@ -7,6 +7,48 @@ top until tagged.
 
 ### Added
 
+- **`GET /api/health`, a monitoring endpoint for Uptime Kuma and similar.** Reports the radio, the
+  database write queue and each MQTT broker as JSON, and **always answers 200
+  while the process is alive** — a monitor that cannot reach OwlShack already fails the request, so
+  the status code is not spent on a second opinion and the operator decides what is worth alerting
+  on. `problems` is a possibly-empty array of binary faults and `status` is `ok` exactly when it is
+  empty; a Json Query monitor on `$count(problems)` or `radio.connected` covers most cases.
+
+  Radio health keeps three ages apart, because conflating them is how a quiet mesh gets mistaken
+  for a dead board: `lastReplySecs` is the board answering a status query (the liveness probe's own
+  signal), `lastRxSecs` is mesh traffic, `lastTxSecs` is our own sends. Each is `null` rather than
+  `0` where there is nothing to measure from. Nothing here thresholds mesh silence — the right
+  value differs by orders of magnitude between a bench node and a city repeater.
+
+  `database.writesDroppedLastSecs` exposes the `WriteAsync` overflow for the first time. The
+  counter was already incremented and logged, but nothing reported it, and a dropped write is
+  invisible everywhere else: the row never appears and every surface downstream still looks
+  healthy. The **age** is the field to alert on — `writesDropped` only ever rises, so it cannot
+  distinguish failing now from a bad minute last week, and a past loss is deliberately kept out of
+  `problems` so one transient overflow cannot pin the endpoint to `degraded` until restart.
+
+  The response is written on the assumption it may be reachable from the internet. The running
+  nodes are not listed at all: neither a name nor a peer count can report a fault — peers are
+  hydrated from SQLite and only grow, so the count reads the same with the antenna unplugged, and
+  a node that fails to start exits the process rather than quietly leaving a list — while both
+  would tie a public hostname to a mesh identity that public maps resolve to coordinates. "No node
+  is running at all" is a `problems` entry. There is no position either, and a broker reports
+  `connectedSecs` / `lastErrorSecs` rather than the transport error, which would name a private
+  broker's host and port. Both are ages rather than flags: `connected` is a sample, so a broker
+  reconnecting every thirty seconds reads `true` on nearly every scrape and only a connection age
+  resetting to near zero shows the flapping, and the observer never clears its last error on
+  reconnect, so a boolean built from it would stay true until restart. This applies to
+  `/api/health` only: the rest of the API has no authentication and should not be exposed
+  alongside it.
+
+  Board readings come from the new `StatsProvider.CachedStats`, which reads the last values the
+  board volunteered instead of asking for fresh ones. `Stats` sends three hardware queries and then
+  waits 500ms for the answers, so a monitor scraping on a schedule would have put that traffic on a
+  half-duplex link every time it asked whether the radio was well. A stale reading still drops out
+  on its own after `staleReadingAfter`, so nothing reports an old battery level as current.
+  `GET /api/radio/status` still polls deliberately — it backs a diagnostics page someone is
+  watching — which is where its ~500ms goes.
+
 - **RSS/Atom and CAP triggers.** Two new bot types poll a feed on a schedule and broadcast each
   new item — to the companion's channels, as a DM to a list of contacts, or both. `rss` templates against the feed entry
   (`{{.Title}}`, `{{.Link}}`, `{{.Description}}`, `{{.Published}}`); `cap` fetches the alert

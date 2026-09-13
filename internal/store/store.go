@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -41,6 +42,8 @@ type Store struct {
 	closing    chan struct{}
 	closeOnce  sync.Once
 	dropped    atomic.Uint64
+	// lastDrop is when the most recent write was dropped, in unix nanos; 0 means never.
+	lastDrop atomic.Int64
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -93,6 +96,14 @@ func Open(ctx context.Context, path string) (*Store, error) {
 }
 
 // WriteAsync queues fn on the writer goroutine and never blocks; false means the queue was full and fn was dropped.
+// WriterStats reports the write queue and its drops; lastDrop is zero when none, which the ever-rising count alone cannot say.
+func (s *Store) WriterStats() (queued, capacity int, dropped uint64, lastDrop time.Time) {
+	if nanos := s.lastDrop.Load(); nanos != 0 {
+		lastDrop = time.Unix(0, nanos)
+	}
+	return len(s.writerCh), cap(s.writerCh), s.dropped.Load(), lastDrop
+}
+
 func (s *Store) WriteAsync(fn func()) bool {
 	if s.closed() {
 		return false
@@ -101,6 +112,7 @@ func (s *Store) WriteAsync(fn func()) bool {
 	case s.writerCh <- fn:
 		return true
 	default:
+		s.lastDrop.Store(time.Now().UnixNano())
 		dropped := s.dropped.Add(1)
 		if dropped == 1 || dropped%100 == 0 {
 			slog.Warn("store writer queue full, dropping write", "dropped", dropped)

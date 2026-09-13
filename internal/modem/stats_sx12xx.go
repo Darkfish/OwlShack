@@ -44,6 +44,9 @@ func (p *sx12xxStatsProvider) Transport() string { return "spi" }
 func (p *sx12xxStatsProvider) RadioConfig() RadioInfo { return p.radio }
 
 // Stats reports the modem's noise floor and our uptime; battery and MCU temperature stay absent because a Pi has neither sensor.
+// CachedStats is Stats here: SPI reads chip registers, so there is nothing to wait for or cache.
+func (p *sx12xxStatsProvider) CachedStats() DeviceStats { return p.Stats(context.Background()) }
+
 func (p *sx12xxStatsProvider) Stats(context.Context) DeviceStats {
 	ds := DeviceStats{UptimeSecs: uint32(time.Since(p.startTime).Seconds())}
 	if m := p.modem.Load(); m != nil {

@@ -66,6 +66,46 @@ radio/connection change still restarts everything (modem reconnect);
   `configMutate` runs this on the assembled config before persisting.
   `TriggerConfig.Validate` parse-checks templates with stubbed trigger funcs
   (`formatPathBytes`) — extend the stubs if the templater gains functions.
+- **`GET /api/health` is the monitoring endpoint**, shaped for Uptime Kuma and
+  friends rather than for a person. It **always answers 200 while the process is
+  alive**, including when the radio is not: a monitor that cannot reach OwlShack
+  already fails the request, so the status code is not spent on a second
+  opinion. `problems` is a possibly-empty array of binary faults (a thing meant
+  to be connected that is not) and `status` is `ok` exactly when it is empty;
+  everything else is a fact to threshold externally, never a verdict. Three
+  radio ages are kept apart on purpose: `lastReplySecs` is the liveness probe's
+  own signal (the board answering a query, which a quiet mesh does not move),
+  `lastRxSecs` is mesh traffic, and `lastTxSecs` is our own sends. Each is
+  `null` rather than `0` when there is nothing to measure from, so "cannot say"
+  is distinguishable from "just now". `database.writesDroppedLastSecs` is the
+  database signal to threshold. The `WriteAsync` overflow is otherwise silent —
+  the write vanishes and every surface downstream still looks healthy — but the
+  raw `writesDropped` count only ever rises, so it cannot tell "failing now"
+  from "had a bad minute last Tuesday". A past loss is deliberately **not** put
+  in `problems`, which would pin the endpoint to `degraded` for the life of the
+  process after one transient overflow. `writeQueueLen` is a point sample of a
+  queue that normally drains in microseconds, so it reads 0 unless the writer is
+  *sustainedly* behind and will not catch a brief spike. **It is written on the
+  assumption it may be public**: the running nodes are not listed at all — a
+  name or pubkey is on-air already, but published on the internet it ties a
+  hostname to a mesh identity that public maps resolve to coordinates — there is
+  no position, and a broker reports
+  `connectedSecs` / `lastErrorSecs` rather than the transport error, which would
+  name a private broker's host and port. Both are ages for the same reason the
+  radio's are: `connected` is a sample, so a broker reconnecting every thirty
+  seconds reads `true` on nearly every scrape and only a connection age resetting
+  to near zero reveals the flapping, while the observer never clears its last
+  error on reconnect, so a boolean built from it would stay true for the life of
+  the process. Leaving the nodes out costs
+  nothing: peer counts are hydrated from SQLite and only grow, so they read the
+  same with the antenna unplugged, and a node that fails to start exits the
+  process rather than quietly leaving a list. "No node is running at all" is the
+  only state worth reporting and it is a `problems` entry. That
+  is a property of this endpoint alone — the rest of the API is unauthenticated
+  and must not be exposed with it. It also never polls the board: board readings
+  come from `StatsProvider.CachedStats`, not `Stats`, so a scrape costs no
+  airtime and no 500ms wait. `GET /api/radio/status` still polls, which is why
+  it takes ~500ms — that one is a diagnostics page a person is looking at.
 - **Feed triggers (`rss`, `cap`) poll `triggers.url`** on `triggers.schedule`,
   which unlike `cron` may be blank and then defaults to `@every 5m`. The bot
   editor writes that column as a number and a unit (`@every 15m`) rather than a
@@ -315,6 +355,7 @@ POST /api/config/mqtt/brokers          PUT|DELETE /api/config/mqtt/brokers/{id}
 GET  /api/config/companions                                  (id, name, pubkey, privateKeySet, …)
 POST /api/config/companions            PUT|DELETE /api/config/companions/{id}
 GET  /api/config/companions/{id}/channels
+GET  /api/health                                             (monitoring snapshot; see below)
 GET  /api/config/channels                                    (all channels; for trigger name resolution)
 POST /api/config/companions/{id}/channels    PUT|DELETE /api/config/channels/{id}
 GET  /api/config/triggers[?companionId=N]

@@ -18,6 +18,7 @@ func wirePacketLogger(mux *node.RadioMux, modem node.Modem, db *store.Store, srv
 	logRadio := mux.NewRadio()
 
 	logRadio.SetRawDataHandler(func(data []byte, snr float32, rssi int8, hasSignalInfo bool) {
+		radioSeen.rx()
 		pkt, err := meshcore.PacketFromBytes(data)
 		routeType, payloadType := packetTypes(pkt, err)
 
@@ -57,6 +58,7 @@ func wirePacketLogger(mux *node.RadioMux, modem node.Modem, db *store.Store, srv
 	})
 
 	modem.AddOutboundHandler(func(data []byte) {
+		radioSeen.tx()
 		pkt, err := meshcore.PacketFromBytes(data)
 		routeType, payloadType := packetTypes(pkt, err)
 
