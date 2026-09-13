@@ -14,10 +14,13 @@ require (
 	modernc.org/sqlite v1.58.0
 )
 
-require github.com/meshcore-go/meshcore-go/hardware/sx12xx v1.4.0
+require (
+	github.com/meshcore-go/meshcore-go/hardware/sx12xx v1.4.0
+	github.com/mmcdole/gofeed v1.4.2
+	github.com/tuzzmaniandevil/cap-go v1.0.0
+)
 
 require (
-	github.com/mmcdole/gofeed v1.4.2 // indirect
 	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
