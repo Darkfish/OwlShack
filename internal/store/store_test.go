@@ -42,6 +42,7 @@ func mkCompanion(t *testing.T, st *Store, name string) int64 {
 func f64(v float64) *float64 { return &v }
 func i8(v int8) *int8        { return &v }
 func iptr(v int) *int        { return &v }
+func i64ptr(v int64) *int64  { return &v }
 func sptr(v string) *string  { return &v }
 
 func TestMessageRepo_InsertRoundTrip(t *testing.T) {
@@ -763,7 +764,7 @@ func TestPacketRepo_ListFilter(t *testing.T) {
 // Bump wantVersion whenever a migration is appended to the migrations slice.
 func TestStore_MigrateUserVersion(t *testing.T) {
 	t.Parallel()
-	const wantVersion = 12 // migrateV1, 2 squashed noop slots, migrateV2..migrateV10
+	const wantVersion = 13 // migrateV1, 2 squashed noop slots, migrateV2..migrateV11
 	st := newTestStore(t)
 	var v int
 	if err := st.db.QueryRowContext(t.Context(), "PRAGMA user_version").Scan(&v); err != nil {

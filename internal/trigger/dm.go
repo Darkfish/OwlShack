@@ -2,7 +2,6 @@ package trigger
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -33,16 +32,9 @@ type DMTrigger struct {
 }
 
 func NewDMTrigger(botName string, cfg config.TriggerConfig, log *slog.Logger) (*DMTrigger, error) {
-	var patterns []*regexp.Regexp
-	if cfg.Match != nil {
-		patterns = make([]*regexp.Regexp, 0, len(*cfg.Match))
-		for _, m := range *cfg.Match {
-			re, err := regexp.Compile(m)
-			if err != nil {
-				return nil, fmt.Errorf("invalid match pattern %q: %w", m, err)
-			}
-			patterns = append(patterns, re)
-		}
+	patterns, err := compilePatterns(cfg.Match)
+	if err != nil {
+		return nil, err
 	}
 
 	var contacts []string
@@ -136,34 +128,12 @@ func (t *DMTrigger) listensTo(dm DirectMessage) bool {
 	return false
 }
 
-// matchesAny returns the first matching pattern's named captures, nil on no match, or an empty non-nil map when there are no patterns.
 func (t *DMTrigger) matchesAny(text string) map[string]string {
-	if len(t.patterns) == 0 {
-		return map[string]string{}
-	}
-	for _, re := range t.patterns {
-		m := re.FindStringSubmatch(text)
-		if m == nil {
-			continue
-		}
-		captures := make(map[string]string)
-		for i, name := range re.SubexpNames() {
-			if i == 0 || name == "" {
-				continue
-			}
-			captures[name] = m[i]
-		}
-		return captures
-	}
-	return nil
+	return matchCaptures(t.patterns, text)
 }
 
 func (t *DMTrigger) patternStrings() []string {
-	strs := make([]string, len(t.patterns))
-	for i, re := range t.patterns {
-		strs[i] = re.String()
-	}
-	return strs
+	return patternStrings(t.patterns)
 }
 
 var _ Trigger = (*DMTrigger)(nil)

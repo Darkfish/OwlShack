@@ -2,7 +2,6 @@ package trigger
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"regexp"
 	"sync"
@@ -26,16 +25,9 @@ type ChannelTrigger struct {
 }
 
 func NewChannelTrigger(botName string, cfg config.TriggerConfig, n *node.Node, channels []*meshcore.ChannelEntry, log *slog.Logger) (*ChannelTrigger, error) {
-	var patterns []*regexp.Regexp
-	if cfg.Match != nil {
-		patterns = make([]*regexp.Regexp, 0, len(*cfg.Match))
-		for _, m := range *cfg.Match {
-			re, err := regexp.Compile(m)
-			if err != nil {
-				return nil, fmt.Errorf("invalid match pattern %q: %w", m, err)
-			}
-			patterns = append(patterns, re)
-		}
+	patterns, err := compilePatterns(cfg.Match)
+	if err != nil {
+		return nil, err
 	}
 
 	var channelFilter map[string]bool
@@ -132,29 +124,11 @@ func (t *ChannelTrigger) HandleGroupText(pkt *meshcore.Packet) {
 	})
 }
 
-// matchesAny returns the first matching pattern's named captures, nil on no match, or an empty non-nil map when there are no patterns.
 func (t *ChannelTrigger) matchesAny(text string) map[string]string {
-	if len(t.patterns) == 0 {
-		return map[string]string{}
-	}
-	for _, re := range t.patterns {
-		m := re.FindStringSubmatch(text)
-		t.log.Log(context.Background(), logging.LevelTrace, "regex check",
-			"pattern", re.String(),
-			"text", text, "matched", m != nil)
-		if m == nil {
-			continue
-		}
-		captures := make(map[string]string)
-		for i, name := range re.SubexpNames() {
-			if i == 0 || name == "" {
-				continue
-			}
-			captures[name] = m[i]
-		}
-		return captures
-	}
-	return nil
+	captures := matchCaptures(t.patterns, text)
+	t.log.Log(context.Background(), logging.LevelTrace, "regex check",
+		"text", text, "patterns", t.patternStrings(), "matched", captures != nil)
+	return captures
 }
 
 func (t *ChannelTrigger) channelNames() []string {
@@ -166,11 +140,7 @@ func (t *ChannelTrigger) channelNames() []string {
 }
 
 func (t *ChannelTrigger) patternStrings() []string {
-	strs := make([]string, len(t.patterns))
-	for i, re := range t.patterns {
-		strs[i] = re.String()
-	}
-	return strs
+	return patternStrings(t.patterns)
 }
 
 var _ Trigger = (*ChannelTrigger)(nil)

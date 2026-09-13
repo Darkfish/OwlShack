@@ -3,9 +3,11 @@ package config
 import (
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/robfig/cron/v3"
 )
@@ -27,6 +29,8 @@ type TriggerConfig struct {
 	PathHashSize *uint8 `json:"pathHashSize,omitempty" yaml:"pathHashSize,omitempty" toml:"pathHashSize,omitempty"`
 
 	Schedule string `json:"schedule,omitempty" yaml:"schedule,omitempty" toml:"schedule,omitempty"`
+
+	URL string `json:"url,omitempty" yaml:"url,omitempty" toml:"url,omitempty"` // Feed to poll, for rss and cap triggers
 }
 
 // Validate rejects trigger configs that would fail companion construction, which after a reload exits the process.
@@ -45,8 +49,30 @@ func (t *TriggerConfig) Validate() error {
 		}
 	case "dm":
 		// No channel or contact is required: an empty contact list listens to every sender the DM policy already let through.
+	case "rss", "cap":
+		if t.URL == "" {
+			return fmt.Errorf("%s trigger requires a url", t.Type)
+		}
+		u, err := url.Parse(t.URL)
+		if err != nil {
+			return fmt.Errorf("invalid url %q: %w", t.URL, err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("url %q must be http or https", t.URL)
+		}
+		// A feed trigger answers nobody, so with neither a channel nor a contact it can never
+		// say anything.
+		if (t.Channels == nil || len(*t.Channels) == 0) && (t.Contacts == nil || len(*t.Contacts) == 0) {
+			return fmt.Errorf("%s trigger requires at least one channel or contact", t.Type)
+		}
+		// An empty schedule takes the trigger's own default rather than failing here.
+		if t.Schedule != "" {
+			if err := validateFeedSchedule(t.Schedule); err != nil {
+				return err
+			}
+		}
 	default:
-		return fmt.Errorf("unknown trigger type %q (supported: group, dm, cron)", t.Type)
+		return fmt.Errorf("unknown trigger type %q (supported: group, dm, cron, rss, cap)", t.Type)
 	}
 
 	if t.Template == "" {
@@ -63,9 +89,16 @@ func (t *TriggerConfig) Validate() error {
 	}
 
 	if t.Match != nil {
-		for _, pattern := range *t.Match {
-			if _, err := regexp.Compile(pattern); err != nil {
-				return fmt.Errorf("invalid match pattern %q: %w", pattern, err)
+		fields := matchFields[t.Type]
+		for _, entry := range *t.Match {
+			if fields != nil {
+				if err := validateFieldPattern(entry, fields); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := regexp.Compile(entry); err != nil {
+				return fmt.Errorf("invalid match pattern %q: %w", entry, err)
 			}
 		}
 	}
@@ -90,6 +123,30 @@ func (t *TriggerConfig) Validate() error {
 		return fmt.Errorf("pathHashSize must be 0-4")
 	}
 
+	return nil
+}
+
+// MinPollInterval floors how often a feed trigger may poll, so a bot cannot hammer a publisher.
+const MinPollInterval = time.Minute
+
+// validateFeedSchedule accepts anything cron does but floors the interval. A crontab spec has no
+// seconds field, so a minute is already its finest granularity and only an "@every" descriptor
+// can ask for less.
+func validateFeedSchedule(spec string) error {
+	const every = "@every " // the exact prefix cron matches; descriptors are case-sensitive
+	if rest, ok := strings.CutPrefix(spec, every); ok {
+		d, err := time.ParseDuration(rest)
+		if err != nil {
+			return fmt.Errorf("invalid poll interval %q: %w", spec, err)
+		}
+		if d < MinPollInterval {
+			return fmt.Errorf("poll interval %s is below the %s minimum", d, MinPollInterval)
+		}
+		return nil
+	}
+	if _, err := cron.ParseStandard(spec); err != nil {
+		return fmt.Errorf("invalid schedule %q: %w", spec, err)
+	}
 	return nil
 }
 

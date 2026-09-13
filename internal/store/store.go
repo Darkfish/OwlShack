@@ -204,6 +204,7 @@ var migrations = []func(context.Context, dbExecer) error{
 	migrateV8,   // 10 — settings.spi_board (SPI radio hat wiring)
 	migrateV9,   // 11 — repeater.admin_password backfilled off blank (blank granted admin)
 	migrateV10,  // 12 — companions.dm_policy + dm_allow (who may DM this companion)
+	migrateV11,  // 13 — triggers.url (the feed an rss/cap trigger polls)
 }
 
 // dbExecer is the subset of *sql.DB / *sql.Tx a migration needs.
@@ -629,6 +630,12 @@ func migrateV10(ctx context.Context, db dbExecer) error {
 		}
 	}
 	return nil
+}
+
+// migrateV11 adds the feed URL an rss or cap trigger polls; empty for every trigger type that has none.
+func migrateV11(ctx context.Context, db dbExecer) error {
+	_, err := db.ExecContext(ctx, `ALTER TABLE triggers ADD COLUMN url TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 // migrateV8 adds settings.spi_board; NULL for a KISS modem, which is every pre-existing install.

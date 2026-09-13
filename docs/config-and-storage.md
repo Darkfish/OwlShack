@@ -66,6 +66,31 @@ radio/connection change still restarts everything (modem reconnect);
   `configMutate` runs this on the assembled config before persisting.
   `TriggerConfig.Validate` parse-checks templates with stubbed trigger funcs
   (`formatPathBytes`) — extend the stubs if the templater gains functions.
+- **Feed triggers (`rss`, `cap`) poll `triggers.url`** on `triggers.schedule`,
+  which unlike `cron` may be blank and then defaults to `@every 5m`. The bot
+  editor writes that column as a number and a unit (`@every 15m`) rather than a
+  cron expression, and `validateFeedSchedule` floors any `@every` at one
+  minute — a crontab spec has no seconds field, so a minute is already its
+  finest step and only the descriptor form can ask for less. Each new
+  item goes to every channel in `trigger_channels` *and* as a DM to every
+  pubkey in `triggers.contacts` — the same column the `dm` type uses to filter
+  senders, read here as recipients. At least one of the two is required: with
+  neither, the trigger can never say anything. The first poll after a start only
+  records what is already published, so a restart never replays a backlog onto
+  the mesh, and one poll sends at most five items — a feed that republishes
+  itself would otherwise queue dozens of transmissions onto a duty-cycled
+  radio. A `cap` trigger fetches the alert document each entry links to; a 4xx
+  or unparseable document is recorded as seen rather than refetched every poll.
+  Templates get flattened conveniences (`.Title`/`.Link` for rss,
+  `.Severity`/`.Headline`/`.Areas` for cap) plus the parsed structs themselves:
+  `.Item` (`*gofeed.Item`) on both, and `.Alert`/`.Info` (`*cap.Alert`) on cap.
+  Match patterns on a feed trigger are **field-scoped**, written
+  `<field>:<regex>` (`severity:^(Extreme|Severe)$`). Patterns naming the same
+  field are alternatives; different fields must all match, which is the pairing
+  regex alone cannot express — alternation already says OR inside one field.
+  `matchFields` in `internal/config/feedfields.go` is the vocabulary and
+  `TriggerConfig.Validate` rejects an unscoped or misspelt field rather than
+  compiling it as a bare regex that silently never matches.
 - **DM acceptance is `companions.dm_policy`** (`contacts` | `allowlist` |
   `anyone`, default `contacts`) with `companions.dm_allow` holding the
   allowlist's pubkeys newline-encoded, the same encoding `triggers.contacts`

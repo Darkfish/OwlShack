@@ -44,10 +44,32 @@ const TYPE_OPTS = [
   { value: "group", label: "Group message (match & reply)" },
   { value: "dm", label: "Direct message (match & reply)" },
   { value: "cron", label: "Cron (scheduled broadcast)" },
+  { value: "rss", label: "RSS/Atom feed (new items)" },
+  { value: "cap", label: "CAP alerts (emergency feed)" },
 ];
 
+// rss and cap both poll a feed on a schedule; only what they do with an item differs.
+const isFeedType = (t: string) => t === "rss" || t === "cap";
+
+const POLL_UNITS = [
+  { value: "m", label: "minutes" },
+  { value: "h", label: "hours" },
+];
+
+// A feed's poll interval is stored in the same `schedule` column as a cron spec, as the "@every"
+// descriptor cron already understands, so the two fields here round-trip through one string.
+function parsePollInterval(schedule: string | null | undefined) {
+  const m = /^@every (\d+)([mh])$/.exec(schedule ?? "");
+  return m ? { every: m[1], unit: m[2] } : { every: "5", unit: "m" };
+}
+
+// "@every 15m" reads as machinery; "every 15m" reads as English.
+const humanSchedule = (s: string) => s.replace(/^@every /, "every ");
+
 // Practical regex examples for bot authors. Patterns use Go's RE2 engine.
-const REGEX_EXAMPLES: { pattern: string; desc: string }[] = [
+type RegexExample = { pattern: string; desc: string };
+
+const CHAT_REGEX_EXAMPLES: RegexExample[] = [
   { pattern: "(?i)^!bot$", desc: 'exactly "!bot", any case (not "!bottle")' },
   { pattern: "(?i)^ping", desc: 'starts with "ping" — "Ping", "ping me!"' },
   { pattern: "(?i)\\bweather\\b", desc: 'the whole word "weather" anywhere' },
@@ -59,7 +81,83 @@ const REGEX_EXAMPLES: { pattern: string; desc: string }[] = [
   },
 ];
 
-function RegexHelp() {
+const RSS_REGEX_EXAMPLES: RegexExample[] = [
+  { pattern: "title:(?i)warning", desc: 'the title mentions "warning"' },
+  {
+    pattern: "title:(?i)(flood|slip|closure)",
+    desc: "any one of several words — alternation is how you say OR",
+  },
+  { pattern: "category:(?i)^alerts$", desc: "one of the item's categories" },
+  {
+    pattern: "title:(?i)magnitude (?P<mag>[0-9.]+)",
+    desc: "capture the number as {{.Match.mag}}",
+  },
+];
+
+// Fields must be named, or a severity filter would match the word loose in a description.
+const CAP_REGEX_EXAMPLES: RegexExample[] = [
+  {
+    pattern: "severity:^(Extreme|Severe)$",
+    desc: "only the two highest severities",
+  },
+  {
+    pattern: "urgency:^Immediate$",
+    desc: "only alerts needing immediate action",
+  },
+  { pattern: "msgtype:^(Alert|Update)$", desc: "skip Cancel and Ack messages" },
+  { pattern: "event:(?i)tsunami", desc: "the alert is about a tsunami" },
+  {
+    pattern: "area:(?i)(?P<area>Northland|Auckland)",
+    desc: "capture the region as {{.Match.area}}",
+  },
+];
+
+const regexExamplesFor = (t: string): RegexExample[] =>
+  t === "cap"
+    ? CAP_REGEX_EXAMPLES
+    : t === "rss"
+      ? RSS_REGEX_EXAMPLES
+      : CHAT_REGEX_EXAMPLES;
+
+// The fields a pattern may name; the server-side vocabulary is internal/config/feedfields.go.
+const RSS_MATCH_FIELDS = [
+  "title",
+  "description",
+  "content",
+  "link",
+  "author",
+  "category",
+];
+const CAP_MATCH_FIELDS = [
+  "event",
+  "headline",
+  "description",
+  "instruction",
+  "severity",
+  "urgency",
+  "certainty",
+  "msgtype",
+  "status",
+  "area",
+  "sender",
+  "category",
+];
+
+const fieldOptions = (t: string) =>
+  (t === "cap"
+    ? CAP_MATCH_FIELDS
+    : t === "rss"
+      ? RSS_MATCH_FIELDS
+      : undefined
+  )?.map((f) => ({ value: f, label: f }));
+
+// What a pattern is actually run against — different enough per type to be worth spelling out.
+const MATCH_SUBJECT: Record<string, string> = {
+  cap: "Each pattern applies to one field of the alert. Patterns on the same field are alternatives; different fields must all match.",
+  rss: "Each pattern applies to one field of the item. Patterns on the same field are alternatives; different fields must all match.",
+};
+
+function RegexHelp({ type }: { type: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -80,14 +178,16 @@ function RegexHelp() {
             Match pattern examples
           </p>
           <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground/70">
-            Patterns are regular expressions. They match anywhere in the message
-            unless you anchor with ^ (start) and $ (end).
+            {MATCH_SUBJECT[type] ?? "Matched against the message text."}{" "}
+            Patterns match anywhere unless anchored with ^ and $.
           </p>
         </div>
         <div className="divide-y divide-border">
-          {REGEX_EXAMPLES.map((ex) => (
+          {regexExamplesFor(type).map((ex) => (
             <div key={ex.pattern} className="px-3 py-2">
-              <code className="font-mono text-xs text-primary">{ex.pattern}</code>
+              <code className="font-mono text-xs text-primary">
+                {ex.pattern}
+              </code>
               <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                 {ex.desc}
               </p>
@@ -96,7 +196,8 @@ function RegexHelp() {
         </div>
         <div className="space-y-1.5 border-t border-border px-3 py-2">
           <p className="font-mono text-[10px] leading-relaxed text-muted-foreground/70">
-            (?i) ignore case · \b word boundary · .* any text · (a|b) a or b
+            (?i) ignore case · (?m) ^ and $ match each line · \b word boundary ·
+            (a|b) a or b
           </p>
           <a
             href="https://regex101.com/?flavor=golang"
@@ -220,11 +321,20 @@ export function BotsPage() {
                           {t.type}
                         </span>
                         <span className="font-mono text-xs text-muted-foreground truncate">
-                          {companionName.get(t.companionId) ?? `#${t.companionId}`}
+                          {companionName.get(t.companionId) ??
+                            `#${t.companionId}`}
                         </span>
-                        {t.type === "cron" && t.schedule && (
-                          <code className="font-mono text-xs text-info">
-                            {t.schedule}
+                        {(t.type === "cron" || isFeedType(t.type)) &&
+                          t.schedule && (
+                            <code className="font-mono text-xs text-info">
+                              {isFeedType(t.type)
+                                ? humanSchedule(t.schedule)
+                                : t.schedule}
+                            </code>
+                          )}
+                        {isFeedType(t.type) && t.url && (
+                          <code className="font-mono text-xs text-muted-foreground/70 truncate">
+                            {t.url}
                           </code>
                         )}
                         {chNames.length > 0 && (
@@ -232,6 +342,12 @@ export function BotsPage() {
                             {chNames.join(", ")}
                           </span>
                         )}
+                        {isFeedType(t.type) &&
+                          (t.contacts?.length ?? 0) > 0 && (
+                            <span className="font-mono text-xs text-muted-foreground/70">
+                              {t.contacts?.length} direct
+                            </span>
+                          )}
                       </div>
                       {t.match && t.match.length > 0 && (
                         <div className="font-mono text-xs text-muted-foreground/70 truncate">
@@ -323,6 +439,10 @@ function BotEditor({
   const [match, setMatch] = useState<string[]>(trigger?.match ?? []);
   const [contacts, setContacts] = useState<string[]>(trigger?.contacts ?? []);
   const [schedule, setSchedule] = useState(trigger?.schedule ?? "");
+  const initialPoll = parsePollInterval(trigger?.schedule);
+  const [pollEvery, setPollEvery] = useState(initialPoll.every);
+  const [pollUnit, setPollUnit] = useState(initialPoll.unit);
+  const [url, setUrl] = useState(trigger?.url ?? "");
   const [maxRetries, setMaxRetries] = useState(
     trigger?.maxRetries != null ? String(trigger.maxRetries) : "3",
   );
@@ -352,6 +472,13 @@ function BotEditor({
     setSelectedChannels([]);
   };
 
+  // A feed's patterns name fields that a chat trigger has none of, and the reverse, so carrying
+  // them across a type change would only produce a save the server rejects.
+  const changeType = (next: string) => {
+    if (isFeedType(next) !== isFeedType(type)) setMatch([]);
+    setType(next);
+  };
+
   const submit = async () => {
     const channelIds = selectedChannels
       .map((n) => nameToId.get(n))
@@ -368,8 +495,16 @@ function BotEditor({
           template,
           channelIds,
           match: type !== "cron" && patterns.length > 0 ? patterns : null,
-          contacts: type === "dm" && senders.length > 0 ? senders : null,
-          schedule: type === "cron" ? schedule : null,
+          contacts:
+            (type === "dm" || isFeedType(type)) && senders.length > 0
+              ? senders
+              : null,
+          schedule: isFeedType(type)
+            ? `@every ${pollEvery.trim()}${pollUnit}`
+            : type === "cron"
+              ? schedule
+              : null,
+          url: isFeedType(type) ? url.trim() : null,
           maxRetries: parseInt(maxRetries, 10) || 3,
           retryTimeout: parseInt(retryTimeout, 10) || 5,
           pathHashSize:
@@ -388,8 +523,12 @@ function BotEditor({
 
   const valid =
     template.trim() !== "" &&
-    (type === "dm" || selectedChannels.length > 0) &&
-    (type !== "cron" || schedule.trim() !== "");
+    (type === "dm" ||
+      selectedChannels.length > 0 ||
+      (isFeedType(type) && contacts.length > 0)) &&
+    (type !== "cron" || schedule.trim() !== "") &&
+    (!isFeedType(type) || /^[1-9]\d*$/.test(pollEvery.trim())) &&
+    (!isFeedType(type) || /^https?:\/\/\S+$/.test(url.trim()));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -415,9 +554,27 @@ function BotEditor({
               label="Type"
               value={type}
               options={TYPE_OPTS}
-              onChange={setType}
+              onChange={changeType}
             />
           </div>
+
+          {isFeedType(type) && (
+            <TextField
+              label="Feed URL"
+              value={url}
+              onChange={setUrl}
+              placeholder={
+                type === "cap"
+                  ? "https://alerts.metservice.com/cap/atom"
+                  : "https://example.com/feed.xml"
+              }
+              hint={
+                type === "cap"
+                  ? "a CAP feed — each entry links to the alert document, which is fetched and decoded"
+                  : "RSS, Atom or JSON feed"
+              }
+            />
+          )}
 
           {type === "cron" && (
             <TextField
@@ -429,6 +586,24 @@ function BotEditor({
             />
           )}
 
+          {isFeedType(type) && (
+            <div className="grid grid-cols-2 gap-4">
+              <TextField
+                label="Check every"
+                type="number"
+                value={pollEvery}
+                onChange={setPollEvery}
+                hint="one minute is the fastest allowed"
+              />
+              <SelectField
+                label="Unit"
+                value={pollUnit}
+                options={POLL_UNITS}
+                onChange={setPollUnit}
+              />
+            </div>
+          )}
+
           {type !== "dm" && (
             <ChannelMultiSelect
               label="Channels"
@@ -438,7 +613,9 @@ function BotEditor({
               hint={
                 type === "cron"
                   ? "broadcast targets — pick from the companion's channels"
-                  : "channels to listen on — pick from the companion's channels"
+                  : isFeedType(type)
+                    ? "broadcast targets — leave empty to send only to the contacts below"
+                    : "channels to listen on — pick from the companion's channels"
               }
             />
           )}
@@ -458,23 +635,42 @@ function BotEditor({
             />
           )}
 
+          {isFeedType(type) && (
+            <PeerListField
+              label="Send direct to (optional)"
+              values={contacts}
+              onChange={setContacts}
+              peers={peers}
+              addLabel="add recipient"
+              emptyHint="no recipients: this bot only posts to the channels above"
+              hint="each new item is also sent as a DM to everyone listed"
+              dialogTitle="Add recipient"
+              dialogDescription="Pick who receives each new item as a direct message."
+              idPrefix="feed-recipient"
+            />
+          )}
+
           {type !== "cron" && (
             <StringListField
               label="Match patterns"
               values={match}
               onChange={setMatch}
-              placeholder="(?i)^!bot"
+              prefixOptions={fieldOptions(type)}
+              placeholder={isFeedType(type) ? "(?i)warning" : "(?i)^!bot"}
               addLabel="add pattern"
               emptyHint={
                 type === "dm"
                   ? "no patterns: every message from a listed sender fires this bot"
-                  : "no patterns — add one so this bot can fire"
+                  : isFeedType(type)
+                    ? "no patterns: every new item is broadcast"
+                    : "no patterns — add one so this bot can fire"
               }
-              action={<RegexHelp />}
+              action={<RegexHelp type={type} />}
               hint={
                 <>
-                  regular expressions — the bot fires when a message matches any
-                  pattern.{" "}
+                  {isFeedType(type)
+                    ? "one regular expression per field — same field means either, different fields must all match. "
+                    : "regular expressions — the bot fires when a message matches any pattern. "}
                   <a
                     href="https://regex101.com/?flavor=golang"
                     target="_blank"
@@ -490,12 +686,24 @@ function BotEditor({
 
           <Field
             label="Reply template"
-            hint="Go template — group/dm: {{.Sender}} {{.Message}} {{.Match}} {{.SNR}} {{.Hops}}; dm also has {{.SenderPubKey}}; cron: {{.Time}}"
+            hint={
+              type === "cap"
+                ? 'Go template — {{.Event}} {{.Headline}} {{.Severity}} {{.Urgency}} {{.Areas}} {{.Description}} {{.Instruction}} {{.MsgType}}, {{date .Expires "15:04"}}; the whole decoded alert is on {{.Alert}} and the feed entry on {{.Item}}'
+                : type === "rss"
+                  ? 'Go template — {{.Title}} {{.Link}} {{.Description}} {{.Author}} {{.Feed}}, {{date .Published "15:04"}}; the whole parsed entry is on {{.Item}}'
+                  : "Go template — group/dm: {{.Sender}} {{.Message}} {{.Match}} {{.SNR}} {{.Hops}}; dm also has {{.SenderPubKey}}; cron: {{.Time}}"
+            }
           >
             <Textarea
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
-              placeholder="@[{{.Sender}}] pong"
+              placeholder={
+                type === "cap"
+                  ? "{{.Severity}} {{.Event}}: {{.Headline}} ({{.Areas}})"
+                  : type === "rss"
+                    ? "{{.Title}}"
+                    : "@[{{.Sender}}] pong"
+              }
               rows={3}
               className="resize-none rounded-none border-border font-mono text-sm bg-background"
             />

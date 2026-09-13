@@ -93,6 +93,7 @@ type triggerDTO struct {
 	MaxRetries         *int     `json:"maxRetries"`
 	PathHashSize       *int     `json:"pathHashSize"`
 	Schedule           *string  `json:"schedule"`
+	URL                string   `json:"url"`
 }
 
 func brokerToDTO(b store.Broker) brokerDTO {
@@ -123,7 +124,7 @@ func triggerToDTO(t store.Trigger) triggerDTO {
 		ID: t.ID, CompanionID: t.CompanionID, Type: t.Type, Template: t.Template,
 		CharLimitBehaviour: t.CharLimitBehaviour, Match: t.MatchPatterns, Contacts: t.Contacts,
 		ChannelIDs: t.ChannelIDs, RetryTimeout: t.RetryTimeout, MaxRetries: t.MaxRetries,
-		PathHashSize: t.PathHashSize, Schedule: t.Schedule,
+		PathHashSize: t.PathHashSize, Schedule: t.Schedule, URL: t.URL,
 	}
 }
 

@@ -5,6 +5,27 @@ top until tagged.
 
 ## Unreleased
 
+### Added
+
+- **RSS/Atom and CAP triggers.** Two new bot types poll a feed on a schedule and broadcast each
+  new item — to the companion's channels, as a DM to a list of contacts, or both. `rss` templates against the feed entry
+  (`{{.Title}}`, `{{.Link}}`, `{{.Description}}`, `{{.Published}}`); `cap` fetches the alert
+  document each entry links to and templates against the alert itself
+  (`{{.Severity}}`, `{{.Urgency}}`, `{{.Event}}`, `{{.Headline}}`, `{{.Areas}}`, `{{.Expires}}`),
+  with the whole decoded tree on `{{.Alert}}` and the parsed feed entry on `{{.Item}}`.
+  Match patterns filter which items fire and are scoped to a named field (`severity:^Severe$`):
+  patterns on one field are alternatives, different fields must all match.
+  Feeds are parsed by `gofeed`, which handles RSS 2.0, Atom and JSON Feed. The poll interval is a
+  number and a unit rather than a cron expression, floored at one minute so a bot cannot hammer a
+  publisher.
+
+  Two behaviours matter on a radio: the first poll after a start only *records* what is already
+  published rather than firing on it, so a restart cannot replay a backlog onto the mesh; and one
+  poll sends at most five items, so a publisher that reissues its whole feed cannot queue dozens
+  of transmissions onto a duty-cycled radio.
+
+  Schema `user_version` 13 adds `triggers.url`.
+
 ## v1.4.0-rc.1 — 2026-09-11
 
 A release candidate, not a release: the mesh-facing work below was tested against real repeaters

@@ -294,7 +294,7 @@ func (b *backend) SaveTrigger(ctx context.Context, in api.TriggerInput) (int64, 
 		ID: in.ID, CompanionID: in.CompanionID, Type: in.Type, Template: in.Template,
 		CharLimitBehaviour: in.CharLimitBehaviour, MatchPatterns: in.Match, Contacts: in.Contacts,
 		RetryTimeout: in.RetryTimeout, MaxRetries: in.MaxRetries, PathHashSize: in.PathHashSize,
-		Schedule: in.Schedule, ChannelIDs: in.ChannelIDs,
+		Schedule: in.Schedule, URL: in.URL, ChannelIDs: in.ChannelIDs,
 	}
 	err := b.configMutate(ctx,
 		func(rows *configRows) {
