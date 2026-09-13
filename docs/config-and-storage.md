@@ -66,6 +66,20 @@ radio/connection change still restarts everything (modem reconnect);
   `configMutate` runs this on the assembled config before persisting.
   `TriggerConfig.Validate` parse-checks templates with stubbed trigger funcs
   (`formatPathBytes`) — extend the stubs if the templater gains functions.
+- **`GET /api/health` is the monitoring endpoint**, shaped for Uptime Kuma and
+  friends rather than for a person. It **always answers 200 while the process is
+  alive**, including when the radio is not: a monitor that cannot reach OwlShack
+  already fails the request, so the status code is not spent on a second
+  opinion. `problems` is a possibly-empty array of binary faults (a thing meant
+  to be connected that is not) and `status` is `ok` exactly when it is empty;
+  everything else is a fact to threshold externally, never a verdict. Three
+  radio ages are kept apart on purpose: `lastReplySecs` is the liveness probe's
+  own signal (the board answering a query, which a quiet mesh does not move),
+  `lastRxSecs` is mesh traffic, and `lastTxSecs` is our own sends. Each is
+  `null` rather than `0` when there is nothing to measure from, so "cannot say"
+  is distinguishable from "just now". `database.writesDropped` publishes the
+  `WriteAsync` overflow counter, which is otherwise silent — the write vanishes
+  and every surface downstream still looks healthy.
 - **Feed triggers (`rss`, `cap`) poll `triggers.url`** on `triggers.schedule`,
   which unlike `cron` may be blank and then defaults to `@every 5m`. The bot
   editor writes that column as a number and a unit (`@every 15m`) rather than a
@@ -315,6 +329,7 @@ POST /api/config/mqtt/brokers          PUT|DELETE /api/config/mqtt/brokers/{id}
 GET  /api/config/companions                                  (id, name, pubkey, privateKeySet, …)
 POST /api/config/companions            PUT|DELETE /api/config/companions/{id}
 GET  /api/config/companions/{id}/channels
+GET  /api/health                                             (monitoring snapshot; see below)
 GET  /api/config/channels                                    (all channels; for trigger name resolution)
 POST /api/config/companions/{id}/channels    PUT|DELETE /api/config/channels/{id}
 GET  /api/config/triggers[?companionId=N]

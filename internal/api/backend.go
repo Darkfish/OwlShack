@@ -13,6 +13,9 @@ type Backend interface {
 	// signal. False means there is no modem to report on, which must not be answered with zeroes.
 	RadioStats() (RadioStatsInfo, bool)
 
+	// Health reports the monitoring snapshot behind GET /api/health.
+	Health() HealthInfo
+
 	// ResetModem drops the modem and reconnects it, the same path a vanished serial port takes.
 	ResetModem()
 
@@ -154,6 +157,88 @@ type DiscoveryState struct {
 	// they are: a finished scan's table looks identical to a live one.
 	ScanStartedAt string          `json:"scanStartedAt"`
 	Results       []DiscoveryInfo `json:"results"`
+}
+
+// HealthInfo is the snapshot behind GET /api/health, shaped for an external monitor rather than
+// for a person. It reports and does not judge: the endpoint answers 200 whenever this process is
+// alive — an OwlShack that is down fails the request by itself — and every threshold worth arguing
+// about is left to whoever is watching. Problems holds only binary facts: a thing that is meant to
+// be connected and is not.
+type HealthInfo struct {
+	Status     string   `json:"status"` // "ok" when Problems is empty, else "degraded"
+	Problems   []string `json:"problems"`
+	Version    string   `json:"version"`
+	UptimeSecs int64    `json:"uptimeSecs"`
+
+	Radio      RadioHealth       `json:"radio"`
+	Database   DatabaseHealth    `json:"database"`
+	Companions []CompanionHealth `json:"companions"`
+	Brokers    []BrokerHealth    `json:"brokers"`
+	Repeater   *RepeaterHealth   `json:"repeater"`
+}
+
+// RadioHealth keeps apart three things an operator must not confuse: whether the modem is attached
+// at all, whether the board still answers (LastReplySecs, the liveness probe's own signal), and
+// whether the mesh is talking (LastRxSecs). A quiet mesh moves only the last of those, which is why
+// none of them is turned into a verdict here.
+type RadioHealth struct {
+	Connected bool   `json:"connected"`
+	Transport string `json:"transport"`
+
+	// Seconds since the board last answered a status query, null where this transport cannot be
+	// probed — so a monitor can tell "not answering" from "cannot say".
+	LastReplySecs *int64 `json:"lastReplySecs"`
+	// Seconds since a packet was heard or sent, null when there has been none since startup.
+	LastRxSecs *int64 `json:"lastRxSecs"`
+	LastTxSecs *int64 `json:"lastTxSecs"`
+
+	TxQueueLen     int    `json:"txQueueLen"`
+	TxSent         uint64 `json:"txSent"`
+	TxFailed       uint64 `json:"txFailed"`
+	TxDroppedBusy  uint64 `json:"txDroppedBusy"`
+	TxDroppedQueue uint64 `json:"txDroppedQueue"`
+
+	InboundDroppedNew uint64 `json:"inboundDroppedNew"`
+	HandlerSlow       uint64 `json:"handlerSlow"`
+
+	// Absent where the transport cannot measure them at all, 0 where it measured none.
+	CRCErrors    *uint64 `json:"crcErrors,omitempty"`
+	RecvErrors   *uint64 `json:"recvErrors,omitempty"`
+	DriverErrors *uint64 `json:"driverErrors,omitempty"`
+	HwErrors     *uint64 `json:"hwErrors,omitempty"`
+
+	NoiseFloor *int16   `json:"noiseFloor,omitempty"`
+	BatteryMV  *uint16  `json:"batteryMv,omitempty"`
+	MCUTempC   *float64 `json:"mcuTempC,omitempty"`
+}
+
+// DatabaseHealth watches the async write queue rather than pinging for a row. A read ping proves
+// nothing that matters: the failure worth catching is the writer falling behind, where the write is
+// dropped and everything downstream still looks healthy.
+type DatabaseHealth struct {
+	WriteQueueLen int    `json:"writeQueueLen"`
+	WriteQueueCap int    `json:"writeQueueCap"`
+	WritesDropped uint64 `json:"writesDropped"`
+}
+
+type CompanionHealth struct {
+	Name      string `json:"name"`
+	PubKey    string `json:"pubkey"`
+	PeerCount int    `json:"peerCount"`
+}
+
+type BrokerHealth struct {
+	Name      string `json:"name"`
+	Enabled   bool   `json:"enabled"`
+	Connected bool   `json:"connected"`
+	LastError string `json:"lastError,omitempty"`
+	Published uint64 `json:"published"`
+	Dropped   uint64 `json:"dropped"`
+}
+
+type RepeaterHealth struct {
+	Name   string `json:"name"`
+	PubKey string `json:"pubkey"`
 }
 
 // RadioStatsInfo mirrors modem.LinkStats plus the radio's configuration; the pointer counters are absent when the backend cannot measure them, 0 when it measured none.

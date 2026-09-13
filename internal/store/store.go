@@ -93,6 +93,14 @@ func Open(ctx context.Context, path string) (*Store, error) {
 }
 
 // WriteAsync queues fn on the writer goroutine and never blocks; false means the queue was full and fn was dropped.
+// WriterStats reports the async write queue: its depth, its capacity, and how many writes have
+// been dropped because it was full. A dropped write is silent everywhere else — WriteAsync returns,
+// the RX path carries on, and the row simply never appears — so it is the one database fact worth
+// publishing to a monitor.
+func (s *Store) WriterStats() (queued, capacity int, dropped uint64) {
+	return len(s.writerCh), cap(s.writerCh), s.dropped.Load()
+}
+
 func (s *Store) WriteAsync(fn func()) bool {
 	if s.closed() {
 		return false

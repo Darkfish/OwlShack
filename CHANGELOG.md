@@ -7,6 +7,23 @@ top until tagged.
 
 ### Added
 
+- **`GET /api/health`, a monitoring endpoint for Uptime Kuma and similar.** Reports the radio, the
+  database write queue, the running nodes and each MQTT broker as JSON, and **always answers 200
+  while the process is alive** — a monitor that cannot reach OwlShack already fails the request, so
+  the status code is not spent on a second opinion and the operator decides what is worth alerting
+  on. `problems` is a possibly-empty array of binary faults and `status` is `ok` exactly when it is
+  empty; a Json Query monitor on `$count(problems)` or `radio.connected` covers most cases.
+
+  Radio health keeps three ages apart, because conflating them is how a quiet mesh gets mistaken
+  for a dead board: `lastReplySecs` is the board answering a status query (the liveness probe's own
+  signal), `lastRxSecs` is mesh traffic, `lastTxSecs` is our own sends. Each is `null` rather than
+  `0` where there is nothing to measure from. Nothing here thresholds mesh silence — the right
+  value differs by orders of magnitude between a bench node and a city repeater.
+
+  `database.writesDropped` exposes the `WriteAsync` overflow counter for the first time. It was
+  already being incremented and logged, but nothing reported it, and a dropped write is invisible
+  everywhere else: the row never appears and every surface downstream still looks healthy.
+
 - **RSS/Atom and CAP triggers.** Two new bot types poll a feed on a schedule and broadcast each
   new item — to the companion's channels, as a DM to a list of contacts, or both. `rss` templates against the feed entry
   (`{{.Title}}`, `{{.Link}}`, `{{.Description}}`, `{{.Published}}`); `cap` fetches the alert
