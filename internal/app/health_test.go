@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/meshcore-go/OwlShack/internal/api"
 	"github.com/meshcore-go/OwlShack/internal/modem"
 	"github.com/meshcore-go/OwlShack/internal/store"
 )
@@ -170,4 +171,70 @@ func TestHealth_DoesNotPollTheBoard(t *testing.T) {
 	if got := stats.polls.Load(); got != 1 {
 		t.Errorf("RadioStats polled %d times, want 1", got)
 	}
+}
+
+func TestBrokerHealth_AgesNotFlags(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+
+	t.Run("a recovered broker does not stay failing", func(t *testing.T) {
+		// The observer records the last error it ever saw and never clears it on reconnect, so a
+		// boolean built from it would read as broken for the life of the process.
+		got := brokerHealth(api.MqttBrokerStatus{
+			Name: "letsmesh", Enabled: true, Connected: true,
+			ConnectedTs: now.Add(-2 * time.Hour).Unix(),
+			LastError:   "dial tcp: connection refused",
+			LastErrorTs: now.Add(-3 * time.Hour).Unix(),
+		}, now)
+
+		if got.LastErrorSecs == nil || *got.LastErrorSecs != 10800 {
+			t.Errorf("LastErrorSecs = %v, want 10800", got.LastErrorSecs)
+		}
+		if got.ConnectedSecs == nil || *got.ConnectedSecs != 7200 {
+			t.Errorf("ConnectedSecs = %v, want 7200", got.ConnectedSecs)
+		}
+	})
+
+	t.Run("flapping is visible as a resetting age", func(t *testing.T) {
+		// Connected is sampled, so a broker reconnecting every thirty seconds reads true on nearly
+		// every scrape. Only the age gives it away.
+		got := brokerHealth(api.MqttBrokerStatus{
+			Name: "flappy", Enabled: true, Connected: true,
+			ConnectedTs: now.Add(-4 * time.Second).Unix(),
+			LastErrorTs: now.Add(-5 * time.Second).Unix(),
+		}, now)
+
+		if !got.Connected {
+			t.Fatal("Connected false")
+		}
+		if got.ConnectedSecs == nil || *got.ConnectedSecs != 4 {
+			t.Errorf("ConnectedSecs = %v, want 4 — a boolean cannot show this", got.ConnectedSecs)
+		}
+	})
+
+	t.Run("a disconnected broker reports no connection age", func(t *testing.T) {
+		// ConnectedTs survives the disconnect, so using it here would claim the broker had been
+		// connected for hours while it was down.
+		got := brokerHealth(api.MqttBrokerStatus{
+			Name: "down", Enabled: true, Connected: false,
+			ConnectedTs: now.Add(-6 * time.Hour).Unix(),
+			LastErrorTs: now.Add(-30 * time.Second).Unix(),
+		}, now)
+
+		if got.ConnectedSecs != nil {
+			t.Errorf("ConnectedSecs = %v while disconnected, want null", *got.ConnectedSecs)
+		}
+		if got.LastErrorSecs == nil || *got.LastErrorSecs != 30 {
+			t.Errorf("LastErrorSecs = %v, want 30", got.LastErrorSecs)
+		}
+	})
+
+	t.Run("a broker that never erred reports no error age", func(t *testing.T) {
+		got := brokerHealth(api.MqttBrokerStatus{
+			Name: "clean", Enabled: true, Connected: true, ConnectedTs: now.Add(-time.Minute).Unix(),
+		}, now)
+		if got.LastErrorSecs != nil {
+			t.Errorf("LastErrorSecs = %v, want null", *got.LastErrorSecs)
+		}
+	})
 }

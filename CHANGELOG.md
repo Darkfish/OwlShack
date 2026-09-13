@@ -32,8 +32,12 @@ top until tagged.
   hydrated from SQLite and only grow, so the count reads the same with the antenna unplugged, and
   a node that fails to start exits the process rather than quietly leaving a list — while both
   would tie a public hostname to a mesh identity that public maps resolve to coordinates. "No node
-  is running at all" is a `problems` entry. There is no position either, and `brokers[].failing`
-  stands in for the transport error, which would name a private broker's host and port. This applies to `/api/health` only: the rest of the API has no authentication and
+  is running at all" is a `problems` entry. There is no position either, and a broker reports
+  `connectedSecs` / `lastErrorSecs` rather than the transport error, which would name a private
+  broker's host and port. Both are ages rather than flags: `connected` is a sample, so a broker
+  reconnecting every thirty seconds reads `true` on nearly every scrape and only a connection age
+  resetting to near zero shows the flapping, and the observer never clears its last error on
+  reconnect, so a boolean built from it would stay true until restart. This applies to `/api/health` only: the rest of the API has no authentication and
   should not be exposed alongside it.
 
   Board readings come from the new `StatsProvider.CachedStats`, which reads the last values the

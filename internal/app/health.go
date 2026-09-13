@@ -64,10 +64,7 @@ func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 
 	if brokers, ok := b.MqttStatus(); ok {
 		for _, br := range brokers {
-			info.Brokers = append(info.Brokers, api.BrokerHealth{
-				Name: br.Name, Enabled: br.Enabled, Connected: br.Connected,
-				Failing: br.LastError != "", Published: br.Published, Dropped: br.Dropped,
-			})
+			info.Brokers = append(info.Brokers, brokerHealth(br, now))
 			// Only a broker that is meant to be up counts: a disabled one is not a fault.
 			if br.Enabled && !br.Connected {
 				info.Problems = append(info.Problems, "mqtt: broker "+br.Name+" is not connected")
@@ -83,6 +80,30 @@ func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 	}
 
 	return info
+}
+
+// brokerHealth maps one broker's status onto the wire shape, turning both timestamps into ages.
+func brokerHealth(st api.MqttBrokerStatus, now time.Time) api.BrokerHealth {
+	h := api.BrokerHealth{
+		Name: st.Name, Enabled: st.Enabled, Connected: st.Connected,
+		LastErrorSecs: secsSinceUnix(st.LastErrorTs, now),
+		Published:     st.Published, Dropped: st.Dropped,
+	}
+	// Only meaningful while the connection is up: the timestamp survives a disconnect, and an age
+	// counted from it would read as though the broker were still connected and had been for hours.
+	if st.Connected {
+		h.ConnectedSecs = secsSinceUnix(st.ConnectedTs, now)
+	}
+	return h
+}
+
+// secsSinceUnix is secsSince for the unix-second timestamps the MQTT status carries; 0 means unset.
+func secsSinceUnix(ts int64, now time.Time) *int64 {
+	if ts == 0 {
+		return nil
+	}
+	secs := int64(now.Sub(time.Unix(ts, 0)).Seconds())
+	return &secs
 }
 
 func (b *backend) radioHealth(now time.Time, act *radioActivity) api.RadioHealth {

@@ -89,8 +89,14 @@ radio/connection change still restarts everything (modem reconnect);
   assumption it may be public**: the running nodes are not listed at all — a
   name or pubkey is on-air already, but published on the internet it ties a
   hostname to a mesh identity that public maps resolve to coordinates — there is
-  no position, and `brokers[].failing` stands in for the transport error, which
-  would name a private broker's host and port. Leaving the nodes out costs
+  no position, and a broker reports
+  `connectedSecs` / `lastErrorSecs` rather than the transport error, which would
+  name a private broker's host and port. Both are ages for the same reason the
+  radio's are: `connected` is a sample, so a broker reconnecting every thirty
+  seconds reads `true` on nearly every scrape and only a connection age resetting
+  to near zero reveals the flapping, while the observer never clears its last
+  error on reconnect, so a boolean built from it would stay true for the life of
+  the process. Leaving the nodes out costs
   nothing: peer counts are hydrated from SQLite and only grow, so they read the
   same with the antenna unplugged, and a node that fails to start exits the
   process rather than quietly leaving a list. "No node is running at all" is the

@@ -235,17 +235,25 @@ type DatabaseHealth struct {
 // in Problems. Leaving the names out also keeps this endpoint from linking a public hostname to a
 // mesh identity that public maps resolve to coordinates, the same reason the pubkeys went.
 
-// BrokerHealth reports that a broker failed, never the transport error itself: a paho connect error
-// reads "dial tcp 10.0.0.5:1883: connect: connection refused" and would publish a private broker's
-// address. Connected plus the matching entry in Problems is the whole monitoring signal; the full
-// error stays in the log and on /api/mqtt/status.
+// BrokerHealth never carries the transport error itself: a paho connect error reads
+// "dial tcp 10.0.0.5:1883: connect: connection refused" and would publish a private broker's
+// address. The full text stays in the log and on /api/mqtt/status, both behind the rest of the API.
+//
+// ConnectedSecs is what catches a broker that is flapping. Connected is sampled, so a broker
+// reconnecting every thirty seconds reads true on almost every scrape; the age resetting to near
+// zero each time is the only way to see it from outside. LastErrorSecs is an age rather than a
+// flag because the observer records the last error it ever saw and never clears it on reconnect —
+// a boolean built from it would stay true for the life of the process after one transient failure.
 type BrokerHealth struct {
 	Name      string `json:"name"`
 	Enabled   bool   `json:"enabled"`
 	Connected bool   `json:"connected"`
-	Failing   bool   `json:"failing"`
-	Published uint64 `json:"published"`
-	Dropped   uint64 `json:"dropped"`
+	// Seconds since this connection was established, null when not connected.
+	ConnectedSecs *int64 `json:"connectedSecs"`
+	// Seconds since the last error on this broker, null when it has never had one.
+	LastErrorSecs *int64 `json:"lastErrorSecs"`
+	Published     uint64 `json:"published"`
+	Dropped       uint64 `json:"dropped"`
 }
 
 // RadioStatsInfo mirrors modem.LinkStats plus the radio's configuration; the pointer counters are absent when the backend cannot measure them, 0 when it measured none.

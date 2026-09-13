@@ -98,7 +98,7 @@ func TestHealth_PublishesNoIdentifyingFields(t *testing.T) {
 	t.Parallel()
 	full := HealthInfo{
 		Radio:   RadioHealth{Connected: true, Transport: "kiss"},
-		Brokers: []BrokerHealth{{Name: "b", Enabled: true, Failing: true}},
+		Brokers: []BrokerHealth{{Name: "b", Enabled: true, Connected: true}},
 	}
 	body, err := json.Marshal(full)
 	if err != nil {
