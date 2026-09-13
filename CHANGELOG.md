@@ -8,7 +8,7 @@ top until tagged.
 ### Added
 
 - **`GET /api/health`, a monitoring endpoint for Uptime Kuma and similar.** Reports the radio, the
-  database write queue, the running nodes and each MQTT broker as JSON, and **always answers 200
+  database write queue and each MQTT broker as JSON, and **always answers 200
   while the process is alive** — a monitor that cannot reach OwlShack already fails the request, so
   the status code is not spent on a second opinion and the operator decides what is worth alerting
   on. `problems` is a possibly-empty array of binary faults and `status` is `ok` exactly when it is
@@ -37,8 +37,9 @@ top until tagged.
   broker's host and port. Both are ages rather than flags: `connected` is a sample, so a broker
   reconnecting every thirty seconds reads `true` on nearly every scrape and only a connection age
   resetting to near zero shows the flapping, and the observer never clears its last error on
-  reconnect, so a boolean built from it would stay true until restart. This applies to `/api/health` only: the rest of the API has no authentication and
-  should not be exposed alongside it.
+  reconnect, so a boolean built from it would stay true until restart. This applies to
+  `/api/health` only: the rest of the API has no authentication and should not be exposed
+  alongside it.
 
   Board readings come from the new `StatsProvider.CachedStats`, which reads the last values the
   board volunteered instead of asking for fresh ones. `Stats` sends three hardware queries and then
