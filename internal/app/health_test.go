@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/meshcore-go/OwlShack/internal/modem"
 	"github.com/meshcore-go/OwlShack/internal/store"
 )
 
@@ -112,5 +114,55 @@ func TestHealth_DroppedWritesSurface(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no database problem in %v", info.Problems)
+	}
+}
+
+// countingStats records how often something asks the board a question over the wire. Embedding the
+// interface means any method this test does not define panics rather than quietly passing.
+type countingStats struct {
+	modem.StatsProvider
+	polls atomic.Int64
+}
+
+func (c *countingStats) Stats(context.Context) modem.DeviceStats {
+	c.polls.Add(1)
+	return modem.DeviceStats{BatteryMV: 1111, HaveBattery: true}
+}
+
+func (c *countingStats) CachedStats() modem.DeviceStats {
+	return modem.DeviceStats{BatteryMV: 4200, HaveBattery: true}
+}
+func (c *countingStats) Transport() string            { return "kiss" }
+func (c *countingStats) LinkStats() modem.LinkStats   { return modem.LinkStats{} }
+func (c *countingStats) RadioConfig() modem.RadioInfo { return modem.RadioInfo{} }
+
+// A monitor scrapes this endpoint on a schedule. Asking the radio a question per scrape puts real
+// traffic on a half-duplex link to answer "are you well", and costs the KISS path a 500ms wait, so
+// health must read the cached readings and only the diagnostics endpoint may poll.
+func TestHealth_DoesNotPollTheBoard(t *testing.T) {
+	t.Parallel()
+	db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "poll.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	stats := &countingStats{}
+	b := newBackend(nil, nil, db, stats, nil, nil, nil, nil)
+
+	info := b.health(time.Now(), &radioActivity{})
+	if got := stats.polls.Load(); got != 0 {
+		t.Errorf("health polled the board %d times, want 0", got)
+	}
+	if info.Radio.BatteryMV == nil || *info.Radio.BatteryMV != 4200 {
+		t.Errorf("battery = %v, want the cached 4200", info.Radio.BatteryMV)
+	}
+
+	// The diagnostics endpoint still polls: a person looking at the radio page wants it fresh.
+	if _, ok := b.RadioStats(); !ok {
+		t.Fatal("RadioStats reported no radio")
+	}
+	if got := stats.polls.Load(); got != 1 {
+		t.Errorf("RadioStats polled %d times, want 1", got)
 	}
 }

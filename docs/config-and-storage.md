@@ -85,7 +85,10 @@ radio/connection change still restarts everything (modem reconnect);
   maps resolve to coordinates), no position, and `brokers[].failing` in place of
   the transport error, which would name a private broker's host and port. That
   is a property of this endpoint alone — the rest of the API is unauthenticated
-  and must not be exposed with it.
+  and must not be exposed with it. It also never polls the board: board readings
+  come from `StatsProvider.CachedStats`, not `Stats`, so a scrape costs no
+  airtime and no 500ms wait. `GET /api/radio/status` still polls, which is why
+  it takes ~500ms — that one is a diagnostics page a person is looking at.
 - **Feed triggers (`rss`, `cap`) poll `triggers.url`** on `triggers.schedule`,
   which unlike `cron` may be blank and then defaults to `@every 5m`. The bot
   editor writes that column as a number and a unit (`@every 15m`) rather than a

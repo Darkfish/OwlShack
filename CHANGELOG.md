@@ -31,6 +31,14 @@ top until tagged.
   host and port. This applies to `/api/health` only: the rest of the API has no authentication and
   should not be exposed alongside it.
 
+  Board readings come from the new `StatsProvider.CachedStats`, which reads the last values the
+  board volunteered instead of asking for fresh ones. `Stats` sends three hardware queries and then
+  waits 500ms for the answers, so a monitor scraping on a schedule would have put that traffic on a
+  half-duplex link every time it asked whether the radio was well. A stale reading still drops out
+  on its own after `staleReadingAfter`, so nothing reports an old battery level as current.
+  `GET /api/radio/status` still polls deliberately — it backs a diagnostics page someone is
+  watching — which is where its ~500ms goes.
+
 - **RSS/Atom and CAP triggers.** Two new bot types poll a feed on a schedule and broadcast each
   new item — to the companion's channels, as a DM to a list of contacts, or both. `rss` templates against the feed entry
   (`{{.Title}}`, `{{.Link}}`, `{{.Description}}`, `{{.Published}}`); `cap` fetches the alert

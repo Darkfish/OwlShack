@@ -70,6 +70,9 @@ type StatsProvider interface {
 	Transport() string
 	RadioConfig() RadioInfo
 	Stats(ctx context.Context) DeviceStats
+	// CachedStats is the last readings the board volunteered, with no wire traffic and no wait. Use
+	// it anywhere a caller must not cost 500ms and a reading up to staleReadingAfter old will do.
+	CachedStats() DeviceStats
 	// LinkStats takes no ctx: atomic loads, unlike Stats which polls the board over the wire.
 	LinkStats() LinkStats
 	// EstAirtimeMs and PacketScore mirror the firmware's getEstAirtimeFor and packetScore; both return 0 when radio params are unknown.
@@ -146,6 +149,10 @@ func (p *kissStatsProvider) LinkStats() LinkStats {
 	}
 	return ls
 }
+
+// CachedStats skips the queries and the 500ms wait in Stats. snapshot already drops a reading once
+// the board has been quiet for staleReadingAfter, so a stale value goes absent rather than stale.
+func (p *kissStatsProvider) CachedStats() DeviceStats { return p.snapshot() }
 
 func (p *kissStatsProvider) Transport() string { return "kiss" }
 

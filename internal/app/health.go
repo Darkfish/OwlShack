@@ -100,7 +100,9 @@ func (b *backend) radioHealth(now time.Time, act *radioActivity) api.RadioHealth
 		}
 	}
 
-	stats, ok := b.RadioStats()
+	// false: never poll the board from here. A monitor hits this endpoint on a schedule, and asking
+	// the radio a question per scrape would put real traffic on the link to answer "are you well".
+	stats, ok := b.radioStats(false)
 	if !ok {
 		return h // no modem: everything below would be a zero that reads as healthy
 	}
