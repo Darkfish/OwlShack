@@ -5,6 +5,39 @@ top until tagged.
 
 ## Unreleased
 
+## v1.4.0-rc.2 — 2026-09-14
+
+A second candidate. Since rc.1: the three defects found by running rc.1 on a real server are
+fixed, two new trigger types poll RSS/Atom and CAP feeds, and there is a health endpoint for
+external monitoring. Still unverified on air, and the reason this is not yet v1.4.0: the room
+keep-alive has never run against a live room, and no feed trigger has yet transmitted from real
+hardware — its first-poll priming and five-per-poll clamp are the two behaviours that are invisible
+when they work.
+
+Baseline `v1.3.1` · schema `user_version` 13
+
+### Fixed
+
+- **A second companion on the same channel stole the sender's repeats.** A sent channel message
+  showed "Heard 1x" while the packets page showed the same packet five times. The echo tracker
+  keyed pending packets on the packet hash alone and was shared by every companion, so a second
+  companion carrying the same channel decoded the sender's own packet as a received message and
+  overwrote the sender's entry; the sender kept whichever echo landed before the overwrite, which
+  was one. Pending entries are now scoped to the companion waiting on them. It reproduces only
+  with more than one companion, which is why a single-companion bench could not find it, and is
+  confirmed fixed on the server that reported it.
+- **The peer sheet showed a contact as unattached until reload.** The membership fetch depended on
+  the peer's key and the companion names, and adding a peer to a companion changed neither, so the
+  slideout kept its first answer for as long as it stayed open. The add now bumps a version the
+  fetch depends on.
+- **Messages read while a thread was open came back unread.** The read-position report bailed when
+  the unread count was zero and zeroed it locally the moment the thread opened, so it ran exactly
+  once per visit: anything arriving while the thread was on screen was read by a person and never
+  reported, and came back unread on the next visit. It now tracks the highest message id reported
+  per conversation and posts whenever the thread holds a higher one. The entry case is verified
+  live; the arriving-while-open case is not, because no message decoded to a held channel during
+  the window.
+
 ### Added
 
 - **`GET /api/health`, a monitoring endpoint for Uptime Kuma and similar.** Reports the radio, the
