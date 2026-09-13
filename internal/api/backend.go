@@ -215,10 +215,19 @@ type RadioHealth struct {
 // DatabaseHealth watches the async write queue rather than pinging for a row. A read ping proves
 // nothing that matters: the failure worth catching is the writer falling behind, where the write is
 // dropped and everything downstream still looks healthy.
+// DatabaseHealth watches the async write queue rather than pinging for a row. A read ping proves
+// nothing that matters: the failure worth catching is the writer falling behind, where the write is
+// dropped and everything downstream still looks healthy.
+//
+// WritesDropped only ever rises, so on its own it cannot tell "failing now" from "had a bad minute
+// last Tuesday" — WritesDroppedLastSecs is the one to threshold, and is null when none has ever
+// been dropped. WriteQueueLen is a point sample of a queue that normally drains in microseconds, so
+// it reads 0 unless the writer is *sustainedly* behind; it will not catch a brief spike.
 type DatabaseHealth struct {
-	WriteQueueLen int    `json:"writeQueueLen"`
-	WriteQueueCap int    `json:"writeQueueCap"`
-	WritesDropped uint64 `json:"writesDropped"`
+	WriteQueueLen         int    `json:"writeQueueLen"`
+	WriteQueueCap         int    `json:"writeQueueCap"`
+	WritesDropped         uint64 `json:"writesDropped"`
+	WritesDroppedLastSecs *int64 `json:"writesDroppedLastSecs"`
 }
 
 // CompanionHealth carries no pubkey on purpose. A node's key is broadcast in every advert, so it is

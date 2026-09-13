@@ -77,9 +77,15 @@ radio/connection change still restarts everything (modem reconnect);
   own signal (the board answering a query, which a quiet mesh does not move),
   `lastRxSecs` is mesh traffic, and `lastTxSecs` is our own sends. Each is
   `null` rather than `0` when there is nothing to measure from, so "cannot say"
-  is distinguishable from "just now". `database.writesDropped` publishes the
-  `WriteAsync` overflow counter, which is otherwise silent — the write vanishes
-  and every surface downstream still looks healthy. **It is written on the
+  is distinguishable from "just now". `database.writesDroppedLastSecs` is the
+  database signal to threshold. The `WriteAsync` overflow is otherwise silent —
+  the write vanishes and every surface downstream still looks healthy — but the
+  raw `writesDropped` count only ever rises, so it cannot tell "failing now"
+  from "had a bad minute last Tuesday". A past loss is deliberately **not** put
+  in `problems`, which would pin the endpoint to `degraded` for the life of the
+  process after one transient overflow. `writeQueueLen` is a point sample of a
+  queue that normally drains in microseconds, so it reads 0 unless the writer is
+  *sustainedly* behind and will not catch a brief spike. **It is written on the
   assumption it may be public**: no pubkeys (a key is on-air already, but
   published on the internet it ties a hostname to a mesh identity that public
   maps resolve to coordinates), no position, and `brokers[].failing` in place of

@@ -20,9 +20,12 @@ top until tagged.
   `0` where there is nothing to measure from. Nothing here thresholds mesh silence — the right
   value differs by orders of magnitude between a bench node and a city repeater.
 
-  `database.writesDropped` exposes the `WriteAsync` overflow counter for the first time. It was
-  already being incremented and logged, but nothing reported it, and a dropped write is invisible
-  everywhere else: the row never appears and every surface downstream still looks healthy.
+  `database.writesDroppedLastSecs` exposes the `WriteAsync` overflow for the first time. The
+  counter was already incremented and logged, but nothing reported it, and a dropped write is
+  invisible everywhere else: the row never appears and every surface downstream still looks
+  healthy. The **age** is the field to alert on — `writesDropped` only ever rises, so it cannot
+  distinguish failing now from a bad minute last week, and a past loss is deliberately kept out of
+  `problems` so one transient overflow cannot pin the endpoint to `degraded` until restart.
 
   The response is written on the assumption it may be reachable from the internet. It carries no
   pubkeys — a node's key is broadcast in every advert, but published on the web it ties a public

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -81,19 +82,20 @@ func TestHealth_ReportsTrafficAges(t *testing.T) {
 	}
 }
 
-func TestHealth_DroppedWritesSurface(t *testing.T) {
+func TestHealth_DroppedWritesAreReportedByAgeNotLatched(t *testing.T) {
 	t.Parallel()
 	b := newHealthBackend(t)
 
-	if problemSet(t, b, time.Now(), &radioActivity{})["database: 1 writes dropped, the write queue overflowed"] {
-		t.Fatal("reported dropped writes before any were dropped")
+	if info := b.health(time.Now(), &radioActivity{}); info.Database.WritesDroppedLastSecs != nil {
+		t.Fatalf("reported a drop age of %v before any write was dropped",
+			*info.Database.WritesDroppedLastSecs)
 	}
 
 	// Fill the queue behind a blocked writer, then overflow it: a dropped write is invisible
 	// everywhere else, which is the whole reason it is published here.
 	release := make(chan struct{})
 	b.db.WriteAsync(func() { <-release })
-	for i := 0; i < 4096; i++ {
+	for range 4096 {
 		b.db.WriteAsync(func() {})
 	}
 	defer close(release)
@@ -103,17 +105,20 @@ func TestHealth_DroppedWritesSurface(t *testing.T) {
 		t.Fatalf("no writes recorded as dropped; queue len %d of %d",
 			info.Database.WriteQueueLen, info.Database.WriteQueueCap)
 	}
-	if len(info.Problems) == 0 {
-		t.Fatal("dropped writes produced no problem entry")
+	if info.Database.WritesDroppedLastSecs == nil {
+		t.Fatal("writes were dropped but no age was reported, so a monitor cannot tell when")
 	}
-	found := false
+
+	// The count only ever rises. Flagging it as a problem would leave this endpoint degraded for
+	// the life of the process after one transient overflow, so recency is reported instead and the
+	// operator decides what window matters.
 	for _, p := range info.Problems {
-		if len(p) > 9 && p[:9] == "database:" {
-			found = true
+		if strings.HasPrefix(p, "database:") {
+			t.Errorf("a past write loss latched into problems: %q", p)
 		}
 	}
-	if !found {
-		t.Errorf("no database problem in %v", info.Problems)
+	if info.Status != "" && len(info.Problems) > 0 {
+		t.Logf("problems (should not mention the database): %v", info.Problems)
 	}
 }
 

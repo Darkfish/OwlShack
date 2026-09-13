@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +17,16 @@ func (a *radioActivity) tx() { a.lastTx.Store(time.Now().UnixNano()) }
 
 // radioSeen is written by the packet logger, which sees every frame in both directions.
 var radioSeen radioActivity
+
+// secsSinceTime is secsSince for a time.Time. A zero time.Time does not have a zero UnixNano — it
+// is a large negative number — so the emptiness test has to be IsZero, not the nanos.
+func secsSinceTime(t, now time.Time) *int64 {
+	if t.IsZero() {
+		return nil
+	}
+	secs := int64(now.Sub(t).Seconds())
+	return &secs
+}
 
 // secsSince renders an age for the wire, nil where there is nothing to measure from, so a monitor
 // can tell a silent radio from one that cannot be asked.
@@ -44,12 +53,14 @@ func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 	}
 
 	if b.db != nil {
-		queued, capacity, dropped := b.db.WriterStats()
-		info.Database = api.DatabaseHealth{WriteQueueLen: queued, WriteQueueCap: capacity, WritesDropped: dropped}
-		if dropped > 0 {
-			info.Problems = append(info.Problems,
-				fmt.Sprintf("database: %d writes dropped, the write queue overflowed", dropped))
+		queued, capacity, dropped, lastDrop := b.db.WriterStats()
+		info.Database = api.DatabaseHealth{
+			WriteQueueLen: queued, WriteQueueCap: capacity, WritesDropped: dropped,
+			WritesDroppedLastSecs: secsSinceTime(lastDrop, now),
 		}
+		// Deliberately not a problem: the count never resets, so flagging it would pin this endpoint
+		// to "degraded" for the life of the process after one transient overflow. Problems carries
+		// current state; a past loss is reported as an age for the operator to threshold.
 	}
 
 	// Reuses Companions() but keeps only the name and peer count: position, channel keys and the

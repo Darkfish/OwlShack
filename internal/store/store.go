@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -41,6 +42,8 @@ type Store struct {
 	closing    chan struct{}
 	closeOnce  sync.Once
 	dropped    atomic.Uint64
+	// lastDrop is when the most recent write was dropped, in unix nanos; 0 means never.
+	lastDrop atomic.Int64
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -93,12 +96,16 @@ func Open(ctx context.Context, path string) (*Store, error) {
 }
 
 // WriteAsync queues fn on the writer goroutine and never blocks; false means the queue was full and fn was dropped.
-// WriterStats reports the async write queue: its depth, its capacity, and how many writes have
-// been dropped because it was full. A dropped write is silent everywhere else — WriteAsync returns,
-// the RX path carries on, and the row simply never appears — so it is the one database fact worth
-// publishing to a monitor.
-func (s *Store) WriterStats() (queued, capacity int, dropped uint64) {
-	return len(s.writerCh), cap(s.writerCh), s.dropped.Load()
+// WriterStats reports the async write queue: its depth, its capacity, how many writes have been
+// dropped because it was full, and when the last one was dropped. A dropped write is silent
+// everywhere else — WriteAsync returns, the RX path carries on, and the row simply never appears.
+// lastDrop is zero when none has been dropped; the count alone cannot say that, because it only
+// ever rises and so cannot distinguish "failing now" from "had a bad minute on Tuesday".
+func (s *Store) WriterStats() (queued, capacity int, dropped uint64, lastDrop time.Time) {
+	if nanos := s.lastDrop.Load(); nanos != 0 {
+		lastDrop = time.Unix(0, nanos)
+	}
+	return len(s.writerCh), cap(s.writerCh), s.dropped.Load(), lastDrop
 }
 
 func (s *Store) WriteAsync(fn func()) bool {
@@ -109,6 +116,7 @@ func (s *Store) WriteAsync(fn func()) bool {
 	case s.writerCh <- fn:
 		return true
 	default:
+		s.lastDrop.Store(time.Now().UnixNano())
 		dropped := s.dropped.Add(1)
 		if dropped == 1 || dropped%100 == 0 {
 			slog.Warn("store writer queue full, dropping write", "dropped", dropped)
