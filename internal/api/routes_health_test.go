@@ -97,10 +97,8 @@ func TestHealth_StampsVersionAndUptime(t *testing.T) {
 func TestHealth_PublishesNoIdentifyingFields(t *testing.T) {
 	t.Parallel()
 	full := HealthInfo{
-		Radio:      RadioHealth{Connected: true, Transport: "kiss"},
-		Companions: []CompanionHealth{{Name: "bot", PeerCount: 3}},
-		Brokers:    []BrokerHealth{{Name: "b", Enabled: true, Failing: true}},
-		Repeater:   &RepeaterHealth{Name: "rptr"},
+		Radio:   RadioHealth{Connected: true, Transport: "kiss"},
+		Brokers: []BrokerHealth{{Name: "b", Enabled: true, Failing: true}},
 	}
 	body, err := json.Marshal(full)
 	if err != nil {
@@ -111,7 +109,10 @@ func TestHealth_PublishesNoIdentifyingFields(t *testing.T) {
 	if err := json.Unmarshal(body, &tree); err != nil {
 		t.Fatal(err)
 	}
-	for _, banned := range []string{"pubkey", "lasterror", "lat", "lon", "psk", "privatekey", "password"} {
+	for _, banned := range []string{
+		"pubkey", "lasterror", "lat", "lon", "psk", "privatekey", "password",
+		"companions", "repeater", // node identities: no monitoring value, and they name the mesh node
+	} {
 		if found := findKey(tree, banned); found {
 			t.Errorf("health JSON carries a %q field: %s", banned, body)
 		}

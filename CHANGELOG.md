@@ -27,11 +27,13 @@ top until tagged.
   distinguish failing now from a bad minute last week, and a past loss is deliberately kept out of
   `problems` so one transient overflow cannot pin the endpoint to `degraded` until restart.
 
-  The response is written on the assumption it may be reachable from the internet. It carries no
-  pubkeys — a node's key is broadcast in every advert, but published on the web it ties a public
-  hostname to a mesh identity that public maps resolve to coordinates — no position, and a
-  `brokers[].failing` flag rather than the transport error, which would name a private broker's
-  host and port. This applies to `/api/health` only: the rest of the API has no authentication and
+  The response is written on the assumption it may be reachable from the internet. The running
+  nodes are not listed at all: neither a name nor a peer count can report a fault — peers are
+  hydrated from SQLite and only grow, so the count reads the same with the antenna unplugged, and
+  a node that fails to start exits the process rather than quietly leaving a list — while both
+  would tie a public hostname to a mesh identity that public maps resolve to coordinates. "No node
+  is running at all" is a `problems` entry. There is no position either, and `brokers[].failing`
+  stands in for the transport error, which would name a private broker's host and port. This applies to `/api/health` only: the rest of the API has no authentication and
   should not be exposed alongside it.
 
   Board readings come from the new `StatsProvider.CachedStats`, which reads the last values the

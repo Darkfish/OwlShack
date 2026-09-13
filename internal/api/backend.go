@@ -170,11 +170,9 @@ type HealthInfo struct {
 	Version    string   `json:"version"`
 	UptimeSecs int64    `json:"uptimeSecs"`
 
-	Radio      RadioHealth       `json:"radio"`
-	Database   DatabaseHealth    `json:"database"`
-	Companions []CompanionHealth `json:"companions"`
-	Brokers    []BrokerHealth    `json:"brokers"`
-	Repeater   *RepeaterHealth   `json:"repeater"`
+	Radio    RadioHealth    `json:"radio"`
+	Database DatabaseHealth `json:"database"`
+	Brokers  []BrokerHealth `json:"brokers"`
 }
 
 // RadioHealth keeps apart three things an operator must not confuse: whether the modem is attached
@@ -230,14 +228,12 @@ type DatabaseHealth struct {
 	WritesDroppedLastSecs *int64 `json:"writesDroppedLastSecs"`
 }
 
-// CompanionHealth carries no pubkey on purpose. A node's key is broadcast in every advert, so it is
-// no secret on the mesh — but this endpoint may be reachable from the internet, and publishing the
-// key there links a public hostname to a mesh identity that public maps resolve to coordinates. A
-// monitor needs to tell nodes apart, which the name does.
-type CompanionHealth struct {
-	Name      string `json:"name"`
-	PeerCount int    `json:"peerCount"`
-}
+// The running nodes are deliberately not listed. Neither their names nor their peer counts can
+// report a fault: peers are hydrated from SQLite at startup and only grow, so the count reads the
+// same with the antenna unplugged, and a node that fails to start exits the process rather than
+// vanishing from a list. "No node is running at all" is the only state worth saying, and it is said
+// in Problems. Leaving the names out also keeps this endpoint from linking a public hostname to a
+// mesh identity that public maps resolve to coordinates, the same reason the pubkeys went.
 
 // BrokerHealth reports that a broker failed, never the transport error itself: a paho connect error
 // reads "dial tcp 10.0.0.5:1883: connect: connection refused" and would publish a private broker's
@@ -250,10 +246,6 @@ type BrokerHealth struct {
 	Failing   bool   `json:"failing"`
 	Published uint64 `json:"published"`
 	Dropped   uint64 `json:"dropped"`
-}
-
-type RepeaterHealth struct {
-	Name string `json:"name"`
 }
 
 // RadioStatsInfo mirrors modem.LinkStats plus the radio's configuration; the pointer counters are absent when the backend cannot measure them, 0 when it measured none.

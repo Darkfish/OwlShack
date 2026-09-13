@@ -86,10 +86,15 @@ radio/connection change still restarts everything (modem reconnect);
   process after one transient overflow. `writeQueueLen` is a point sample of a
   queue that normally drains in microseconds, so it reads 0 unless the writer is
   *sustainedly* behind and will not catch a brief spike. **It is written on the
-  assumption it may be public**: no pubkeys (a key is on-air already, but
-  published on the internet it ties a hostname to a mesh identity that public
-  maps resolve to coordinates), no position, and `brokers[].failing` in place of
-  the transport error, which would name a private broker's host and port. That
+  assumption it may be public**: the running nodes are not listed at all — a
+  name or pubkey is on-air already, but published on the internet it ties a
+  hostname to a mesh identity that public maps resolve to coordinates — there is
+  no position, and `brokers[].failing` stands in for the transport error, which
+  would name a private broker's host and port. Leaving the nodes out costs
+  nothing: peer counts are hydrated from SQLite and only grow, so they read the
+  same with the antenna unplugged, and a node that fails to start exits the
+  process rather than quietly leaving a list. "No node is running at all" is the
+  only state worth reporting and it is a `problems` entry. That
   is a property of this endpoint alone — the rest of the API is unauthenticated
   and must not be exposed with it. It also never polls the board: board readings
   come from `StatsProvider.CachedStats`, not `Stats`, so a scrape costs no

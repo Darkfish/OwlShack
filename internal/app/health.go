@@ -46,10 +46,9 @@ func (b *backend) Health() api.HealthInfo {
 // clock or a radio.
 func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 	info := api.HealthInfo{
-		Problems:   []string{},
-		Radio:      b.radioHealth(now, act),
-		Companions: []api.CompanionHealth{},
-		Brokers:    []api.BrokerHealth{},
+		Problems: []string{},
+		Radio:    b.radioHealth(now, act),
+		Brokers:  []api.BrokerHealth{},
 	}
 
 	if b.db != nil {
@@ -61,16 +60,6 @@ func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 		// Deliberately not a problem: the count never resets, so flagging it would pin this endpoint
 		// to "degraded" for the life of the process after one transient overflow. Problems carries
 		// current state; a past loss is reported as an age for the operator to threshold.
-	}
-
-	// Reuses Companions() but keeps only the name and peer count: position, channel keys and the
-	// pubkey are all things a monitor has no use for and a public endpoint should not publish.
-	for _, c := range b.Companions() {
-		info.Companions = append(info.Companions,
-			api.CompanionHealth{Name: c.Name, PeerCount: c.PeerCount})
-	}
-	if b.repeater != nil {
-		info.Repeater = &api.RepeaterHealth{Name: b.repeater.Name()}
 	}
 
 	if brokers, ok := b.MqttStatus(); ok {
