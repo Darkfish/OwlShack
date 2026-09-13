@@ -24,6 +24,13 @@ top until tagged.
   already being incremented and logged, but nothing reported it, and a dropped write is invisible
   everywhere else: the row never appears and every surface downstream still looks healthy.
 
+  The response is written on the assumption it may be reachable from the internet. It carries no
+  pubkeys — a node's key is broadcast in every advert, but published on the web it ties a public
+  hostname to a mesh identity that public maps resolve to coordinates — no position, and a
+  `brokers[].failing` flag rather than the transport error, which would name a private broker's
+  host and port. This applies to `/api/health` only: the rest of the API has no authentication and
+  should not be exposed alongside it.
+
 - **RSS/Atom and CAP triggers.** Two new bot types poll a feed on a schedule and broadcast each
   new item — to the companion's channels, as a DM to a list of contacts, or both. `rss` templates against the feed entry
   (`{{.Title}}`, `{{.Link}}`, `{{.Description}}`, `{{.Published}}`); `cap` fetches the alert

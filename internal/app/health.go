@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/hex"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -53,24 +52,21 @@ func (b *backend) health(now time.Time, act *radioActivity) api.HealthInfo {
 		}
 	}
 
-	// Reuses Companions() rather than re-reading the node, but drops its position and channel
-	// keys: this endpoint is unauthenticated like the rest of the API, and a monitor needs neither.
+	// Reuses Companions() but keeps only the name and peer count: position, channel keys and the
+	// pubkey are all things a monitor has no use for and a public endpoint should not publish.
 	for _, c := range b.Companions() {
 		info.Companions = append(info.Companions,
-			api.CompanionHealth{Name: c.Name, PubKey: c.PubKey, PeerCount: c.PeerCount})
+			api.CompanionHealth{Name: c.Name, PeerCount: c.PeerCount})
 	}
 	if b.repeater != nil {
-		info.Repeater = &api.RepeaterHealth{
-			Name:   b.repeater.Name(),
-			PubKey: hex.EncodeToString(b.repeater.Node().Identity().Identity.PublicKeyBytes()),
-		}
+		info.Repeater = &api.RepeaterHealth{Name: b.repeater.Name()}
 	}
 
 	if brokers, ok := b.MqttStatus(); ok {
 		for _, br := range brokers {
 			info.Brokers = append(info.Brokers, api.BrokerHealth{
 				Name: br.Name, Enabled: br.Enabled, Connected: br.Connected,
-				LastError: br.LastError, Published: br.Published, Dropped: br.Dropped,
+				Failing: br.LastError != "", Published: br.Published, Dropped: br.Dropped,
 			})
 			// Only a broker that is meant to be up counts: a disabled one is not a fault.
 			if br.Enabled && !br.Connected {

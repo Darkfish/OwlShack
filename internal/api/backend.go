@@ -221,24 +221,30 @@ type DatabaseHealth struct {
 	WritesDropped uint64 `json:"writesDropped"`
 }
 
+// CompanionHealth carries no pubkey on purpose. A node's key is broadcast in every advert, so it is
+// no secret on the mesh — but this endpoint may be reachable from the internet, and publishing the
+// key there links a public hostname to a mesh identity that public maps resolve to coordinates. A
+// monitor needs to tell nodes apart, which the name does.
 type CompanionHealth struct {
 	Name      string `json:"name"`
-	PubKey    string `json:"pubkey"`
 	PeerCount int    `json:"peerCount"`
 }
 
+// BrokerHealth reports that a broker failed, never the transport error itself: a paho connect error
+// reads "dial tcp 10.0.0.5:1883: connect: connection refused" and would publish a private broker's
+// address. Connected plus the matching entry in Problems is the whole monitoring signal; the full
+// error stays in the log and on /api/mqtt/status.
 type BrokerHealth struct {
 	Name      string `json:"name"`
 	Enabled   bool   `json:"enabled"`
 	Connected bool   `json:"connected"`
-	LastError string `json:"lastError,omitempty"`
+	Failing   bool   `json:"failing"`
 	Published uint64 `json:"published"`
 	Dropped   uint64 `json:"dropped"`
 }
 
 type RepeaterHealth struct {
-	Name   string `json:"name"`
-	PubKey string `json:"pubkey"`
+	Name string `json:"name"`
 }
 
 // RadioStatsInfo mirrors modem.LinkStats plus the radio's configuration; the pointer counters are absent when the backend cannot measure them, 0 when it measured none.

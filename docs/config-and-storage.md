@@ -79,7 +79,13 @@ radio/connection change still restarts everything (modem reconnect);
   `null` rather than `0` when there is nothing to measure from, so "cannot say"
   is distinguishable from "just now". `database.writesDropped` publishes the
   `WriteAsync` overflow counter, which is otherwise silent — the write vanishes
-  and every surface downstream still looks healthy.
+  and every surface downstream still looks healthy. **It is written on the
+  assumption it may be public**: no pubkeys (a key is on-air already, but
+  published on the internet it ties a hostname to a mesh identity that public
+  maps resolve to coordinates), no position, and `brokers[].failing` in place of
+  the transport error, which would name a private broker's host and port. That
+  is a property of this endpoint alone — the rest of the API is unauthenticated
+  and must not be exposed with it.
 - **Feed triggers (`rss`, `cap`) poll `triggers.url`** on `triggers.schedule`,
   which unlike `cron` may be blank and then defaults to `@every 5m`. The bot
   editor writes that column as a number and a unit (`@every 15m`) rather than a

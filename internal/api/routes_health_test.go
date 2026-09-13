@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -87,4 +88,51 @@ func TestHealth_StampsVersionAndUptime(t *testing.T) {
 	if info.UptimeSecs < 0 {
 		t.Errorf("uptimeSecs = %d", info.UptimeSecs)
 	}
+}
+
+// The health endpoint may be reachable from the internet, where a pubkey links a public hostname to
+// a mesh identity that public maps resolve to coordinates, and a transport error names a private
+// broker's address. Neither has any monitoring value, so neither may reappear in the wire shape —
+// this walks the rendered JSON rather than the struct, so an embedded or renamed field is caught too.
+func TestHealth_PublishesNoIdentifyingFields(t *testing.T) {
+	t.Parallel()
+	full := HealthInfo{
+		Radio:      RadioHealth{Connected: true, Transport: "kiss"},
+		Companions: []CompanionHealth{{Name: "bot", PeerCount: 3}},
+		Brokers:    []BrokerHealth{{Name: "b", Enabled: true, Failing: true}},
+		Repeater:   &RepeaterHealth{Name: "rptr"},
+	}
+	body, err := json.Marshal(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var tree any
+	if err := json.Unmarshal(body, &tree); err != nil {
+		t.Fatal(err)
+	}
+	for _, banned := range []string{"pubkey", "lasterror", "lat", "lon", "psk", "privatekey", "password"} {
+		if found := findKey(tree, banned); found {
+			t.Errorf("health JSON carries a %q field: %s", banned, body)
+		}
+	}
+}
+
+// findKey reports whether any object anywhere in the tree has this key, compared case-insensitively.
+func findKey(v any, want string) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, child := range t {
+			if strings.EqualFold(k, want) || findKey(child, want) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range t {
+			if findKey(child, want) {
+				return true
+			}
+		}
+	}
+	return false
 }
