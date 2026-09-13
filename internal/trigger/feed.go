@@ -51,7 +51,6 @@ type feedPoller struct {
 	schedule string
 	matcher  fieldMatcher
 	parser   *gofeed.Parser
-	client   *http.Client
 	decode   itemDecoder
 	log      *slog.Logger
 
@@ -81,11 +80,10 @@ func newFeedPoller(kind, botName string, cfg config.TriggerConfig, log *slog.Log
 		schedule = feedDefaultSchedule
 	}
 
-	client := &http.Client{Timeout: feedPollTimeout}
 	parser := gofeed.NewParser()
 	parser.UserAgent = "OwlShack/" + buildinfo.Version
 	parser.MaxByteSize = feedMaxBytes
-	parser.Client = client
+	parser.Client = &http.Client{Timeout: feedPollTimeout}
 
 	return &feedPoller{
 		botName:  botName,
@@ -94,7 +92,6 @@ func newFeedPoller(kind, botName string, cfg config.TriggerConfig, log *slog.Log
 		schedule: schedule,
 		matcher:  matcher,
 		parser:   parser,
-		client:   client,
 		log:      log.With("trigger", kind, "url", cfg.URL),
 		seen:     map[string]int{},
 	}, nil
@@ -175,7 +172,7 @@ func (p *feedPoller) poll(ctx context.Context) {
 		captures := p.matcher.match(fields)
 		if captures == nil {
 			p.log.Log(ctx, logging.LevelTrace, "no pattern matched",
-				"item", itemID(item), "patterns", p.matcher.describe())
+				"item", itemID(item), "patterns", p.matcher)
 			continue
 		}
 		data["Match"] = captures

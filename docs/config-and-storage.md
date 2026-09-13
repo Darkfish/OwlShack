@@ -88,7 +88,7 @@ radio/connection change still restarts everything (modem reconnect);
   `<field>:<regex>` (`severity:^(Extreme|Severe)$`). Patterns naming the same
   field are alternatives; different fields must all match, which is the pairing
   regex alone cannot express — alternation already says OR inside one field.
-  `config.RSSMatchFields` / `CAPMatchFields` are the vocabulary and
+  `matchFields` in `internal/config/feedfields.go` is the vocabulary and
   `TriggerConfig.Validate` rejects an unscoped or misspelt field rather than
   compiling it as a bare regex that silently never matches.
 - **DM acceptance is `companions.dm_policy`** (`contacts` | `allowlist` |

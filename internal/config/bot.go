@@ -89,7 +89,7 @@ func (t *TriggerConfig) Validate() error {
 	}
 
 	if t.Match != nil {
-		fields := MatchFieldsFor(t.Type)
+		fields := matchFields[t.Type]
 		for _, entry := range *t.Match {
 			if fields != nil {
 				if err := validateFieldPattern(entry, fields); err != nil {

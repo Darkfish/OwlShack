@@ -119,7 +119,7 @@ const regexExamplesFor = (t: string): RegexExample[] =>
       ? RSS_REGEX_EXAMPLES
       : CHAT_REGEX_EXAMPLES;
 
-// The fields a pattern may name, matching config.RSSMatchFields / CAPMatchFields.
+// The fields a pattern may name; the server-side vocabulary is internal/config/feedfields.go.
 const RSS_MATCH_FIELDS = [
   "title",
   "description",
@@ -143,11 +143,13 @@ const CAP_MATCH_FIELDS = [
   "category",
 ];
 
-const matchFieldsFor = (t: string) =>
-  t === "cap" ? CAP_MATCH_FIELDS : t === "rss" ? RSS_MATCH_FIELDS : undefined;
-
 const fieldOptions = (t: string) =>
-  matchFieldsFor(t)?.map((f) => ({ value: f, label: f }));
+  (t === "cap"
+    ? CAP_MATCH_FIELDS
+    : t === "rss"
+      ? RSS_MATCH_FIELDS
+      : undefined
+  )?.map((f) => ({ value: f, label: f }));
 
 // What a pattern is actually run against — different enough per type to be worth spelling out.
 const MATCH_SUBJECT: Record<string, string> = {

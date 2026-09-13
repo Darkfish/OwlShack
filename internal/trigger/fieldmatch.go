@@ -2,7 +2,9 @@ package trigger
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
+	"slices"
 
 	"github.com/meshcore-go/OwlShack/internal/config"
 )
@@ -37,13 +39,13 @@ func newFieldMatcher(match *[]string) (fieldMatcher, error) {
 // every item.
 func (m fieldMatcher) match(fields map[string]string) map[string]string {
 	captures := map[string]string{}
-	for field, patterns := range m {
+	for _, field := range slices.Sorted(maps.Keys(m)) {
 		text, known := fields[field]
 		if !known {
 			return nil // the decoder offers no such field, so nothing can satisfy it
 		}
 		hit := false
-		for _, re := range patterns {
+		for _, re := range m[field] {
 			sub := re.FindStringSubmatch(text)
 			if sub == nil {
 				continue
@@ -61,14 +63,4 @@ func (m fieldMatcher) match(fields map[string]string) map[string]string {
 		}
 	}
 	return captures
-}
-
-func (m fieldMatcher) describe() []string {
-	out := make([]string, 0, len(m))
-	for field, patterns := range m {
-		for _, re := range patterns {
-			out = append(out, field+":"+re.String())
-		}
-	}
-	return out
 }

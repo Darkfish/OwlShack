@@ -109,7 +109,7 @@ func (t *CAPTrigger) fetchAlert(ctx context.Context, url string) (*cap.Alert, er
 	req.Header.Set("User-Agent", t.parser.UserAgent)
 	req.Header.Set("Accept", "application/cap+xml, application/xml;q=0.9, */*;q=0.1")
 
-	resp, err := t.client.Do(req)
+	resp, err := t.parser.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetching alert: %w", err)
 	}

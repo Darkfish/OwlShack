@@ -10,24 +10,13 @@ import (
 // Match fields for the feed trigger types. A feed item is several distinct pieces of text, so a
 // pattern says which one it applies to — "severity" and "description" are not interchangeable, and
 // running one regex over all of them joined makes a severity filter match the word in a sentence.
-var (
-	RSSMatchFields = []string{"title", "description", "content", "link", "author", "category"}
-	CAPMatchFields = []string{
+// Absent for the types whose patterns run against a single message body.
+var matchFields = map[string][]string{
+	"rss": {"title", "description", "content", "link", "author", "category"},
+	"cap": {
 		"event", "headline", "description", "instruction", "severity", "urgency",
 		"certainty", "msgtype", "status", "area", "sender", "category",
-	}
-)
-
-// MatchFieldsFor returns the fields a trigger type's patterns may name, nil for the types whose
-// patterns run against a single message body.
-func MatchFieldsFor(triggerType string) []string {
-	switch triggerType {
-	case "rss":
-		return RSSMatchFields
-	case "cap":
-		return CAPMatchFields
-	}
-	return nil
+	},
 }
 
 // SplitFieldPattern splits a feed trigger's "<field>:<regex>" entry. The field is everything before
