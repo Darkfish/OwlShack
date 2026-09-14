@@ -63,6 +63,7 @@ func (b *backend) Companions() []api.CompanionInfo {
 		}
 		lat, lon := c.LatLon()
 		infos = append(infos, api.CompanionInfo{
+			ID:        c.ID(),
 			Name:      c.Name(),
 			PubKey:    hex.EncodeToString(c.Node().Identity().Identity.PublicKeyBytes()),
 			PeerCount: c.Node().Peers().Count(),

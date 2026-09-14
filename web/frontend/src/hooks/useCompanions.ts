@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { companionIdFromRef } from "@/lib/companionRef";
 
 // A companion reference as exposed by GET /api/companions.
 export interface CompanionRef {
+  id: number;
   name: string;
   pubkey?: string;
 }
@@ -45,4 +48,28 @@ export function useCompanions(): CompanionRef[] {
   }, []);
 
   return companions;
+}
+
+// useCompanionRef reads the :ref route segment. Use `ref` for links and API paths, where it must
+// survive a rename, and `name` wherever a person reads it or it is compared against a sender - the
+// two stop being interchangeable the moment a companion is renamed.
+//
+// `name` is empty until the companion list resolves, and stays the segment itself for a plain-name
+// link made before refs existed.
+export function useCompanionRef(ref: string | undefined): {
+  ref: string;
+  id: number | null;
+  name: string;
+} {
+  const companions = useCompanions();
+  return useMemo(() => {
+    const seg = ref ?? "";
+    const id = companionIdFromRef(seg);
+    if (id == null) return { ref: seg, id: null, name: seg };
+    return {
+      ref: seg,
+      id,
+      name: companions.find((c) => c.id === id)?.name ?? "",
+    };
+  }, [ref, companions]);
 }

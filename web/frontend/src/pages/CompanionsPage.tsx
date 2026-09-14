@@ -28,6 +28,7 @@ import { PATH_HASH_SIZE_OPTIONS, SelectField, TextField } from "@/components/Con
 import { PositionPicker, round6 } from "@/components/PositionPicker";
 import { PeerListField, type PickablePeer } from "@/components/PeerPicker";
 import { truncateMid } from "@/lib/format";
+import { companionPath } from "@/lib/companionRef";
 
 // A companion decrypts a DM against every peer it has heard advertise, so the policy is the only gate.
 const DM_POLICY_OPTIONS = [
@@ -164,7 +165,7 @@ export function CompanionsPage() {
                     className="group flex items-center gap-4 px-4 py-4 hover:bg-muted/40 transition-colors"
                   >
                     <Link
-                      to={`/companions/${encodeURIComponent(c.name)}`}
+                      to={companionPath(c)}
                       className="flex items-center gap-4 min-w-0 flex-1"
                     >
                       <div className="size-10 grid place-items-center rounded-sm border border-primary/30 bg-primary/10 text-primary shrink-0">

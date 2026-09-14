@@ -14,6 +14,7 @@ import (
 
 type entry struct {
 	messageID    int64
+	companionID  int64
 	companion    string
 	channel      string
 	registeredAt time.Time
@@ -47,10 +48,11 @@ func NewTracker(st *store.Store, hub *api.Hub, log *slog.Logger) *Tracker {
 	}
 }
 
-func (t *Tracker) Track(hash [meshcore.PacketHashSize]byte, msgID int64, companion, channel string) {
+func (t *Tracker) Track(hash [meshcore.PacketHashSize]byte, msgID, companionID int64, companion, channel string) {
 	t.mu.Lock()
 	t.pending[pendingKey{hash: hash, companion: companion}] = &entry{
 		messageID:    msgID,
+		companionID:  companionID,
 		companion:    companion,
 		channel:      channel,
 		registeredAt: time.Now(),
@@ -123,6 +125,7 @@ func (t *Tracker) OnRawPacket(companion string, data []byte, snr float32, rssi i
 			t.hub.Broadcast("messages", map[string]any{
 				"action":      "repeatCount",
 				"companion":   entry.companion,
+				"companionId": entry.companionID,
 				"channel":     entry.channel,
 				"id":          entry.messageID,
 				"repeatCount": count,

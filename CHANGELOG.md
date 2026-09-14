@@ -5,6 +5,20 @@ top until tagged.
 
 ## Unreleased
 
+### Changed
+
+- **Companion URLs no longer break when a companion is renamed.** A companion is now addressed by
+  `/companions/<id>-<slug>` — the id is the authority and the slug is only there to keep the link
+  readable, so a stale slug still resolves. Renaming previously left every open tab and bookmark on
+  a dead URL, because the name was both the display label and the key in all 49 runtime API routes;
+  `/companions/%F0%9F%90%B6Akl/contacts` returned `companion not found` the instant the rename
+  landed, and reloading could not help because the stale name was in the address bar. Plain-name
+  URLs still resolve, so existing bookmarks and installed PWAs keep working.
+- `GET /api/companions` now includes `id`, and the `messages` WebSocket payload now carries
+  `companionId` alongside `companion`. The live-message filter matches on the id, which is known
+  from the URL on the first render and cannot change under a rename; it falls back to the name when
+  a payload has no id rather than dropping the message.
+
 ## v1.4.0-rc.2 — 2026-09-14
 
 A second candidate. Since rc.1: the three defects found by running rc.1 on a real server are

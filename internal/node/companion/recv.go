@@ -135,13 +135,14 @@ func (c *Companion) handleRoomPush(pkt *meshcore.Packet, roomPubKey []byte, room
 
 		if c.hub != nil {
 			wsMsg := map[string]any{
-				"companion": c.cfg.Name,
-				"channel":   channelKey,
-				"sender":    authorName,
-				"text":      text,
-				"direction": "rx",
-				"timestamp": msg.Timestamp.UTC().Format(time.RFC3339),
-				"id":        msg.ID,
+				"companion":   c.cfg.Name,
+				"companionId": c.cfg.ID,
+				"channel":     channelKey,
+				"sender":      authorName,
+				"text":        text,
+				"direction":   "rx",
+				"timestamp":   msg.Timestamp.UTC().Format(time.RFC3339),
+				"id":          msg.ID,
 			}
 			if pkt.HasSignalInfo {
 				wsMsg["snr"] = pkt.SNR
@@ -243,7 +244,7 @@ func (c *Companion) registerPacketHandlers() {
 		if msgID == 0 {
 			return
 		}
-		c.echoTracker.Track(pkt.PacketHash(), msgID, c.cfg.Name, channel)
+		c.echoTracker.Track(pkt.PacketHash(), msgID, c.cfg.ID, c.cfg.Name, channel)
 	})
 
 	c.node.OnPacket(meshcore.PayloadTypeAdvert, func(pkt *meshcore.Packet) {
@@ -376,7 +377,7 @@ func (c *Companion) registerPacketHandlers() {
 			}
 
 			if c.echoTracker != nil && msg.ID != 0 {
-				c.echoTracker.Track(pkt.PacketHash(), msg.ID, c.cfg.Name, ch.Name)
+				c.echoTracker.Track(pkt.PacketHash(), msg.ID, c.cfg.ID, c.cfg.Name, ch.Name)
 			}
 
 			c.log.Debug("message received",
@@ -387,6 +388,7 @@ func (c *Companion) registerPacketHandlers() {
 			if c.hub != nil {
 				wsMsg := map[string]any{
 					"companion":    c.cfg.Name,
+					"companionId":  c.cfg.ID,
 					"channel":      ch.Name,
 					"sender":       payload.Sender,
 					"text":         payload.Text,
@@ -563,13 +565,14 @@ func (c *Companion) registerPacketHandlers() {
 
 			if c.hub != nil {
 				wsMsg := map[string]any{
-					"companion": c.cfg.Name,
-					"channel":   channelKey,
-					"sender":    senderName,
-					"text":      text,
-					"direction": "rx",
-					"timestamp": msg.Timestamp.UTC().Format(time.RFC3339),
-					"id":        msg.ID,
+					"companion":   c.cfg.Name,
+					"companionId": c.cfg.ID,
+					"channel":     channelKey,
+					"sender":      senderName,
+					"text":        text,
+					"direction":   "rx",
+					"timestamp":   msg.Timestamp.UTC().Format(time.RFC3339),
+					"id":          msg.ID,
 				}
 				if hopsPtr != nil {
 					wsMsg["hops"] = *hopsPtr
@@ -628,11 +631,12 @@ func (c *Companion) registerPacketHandlers() {
 
 		if c.hub != nil {
 			wsMsg := map[string]any{
-				"companion": c.cfg.Name,
-				"tag":       tr.Tag,
-				"hops":      hops,
-				"path":      pathHexes,
-				"hopSNRs":   hopSNRs,
+				"companion":   c.cfg.Name,
+				"companionId": c.cfg.ID,
+				"tag":         tr.Tag,
+				"hops":        hops,
+				"path":        pathHexes,
+				"hopSNRs":     hopSNRs,
 			}
 			if pkt.HasSignalInfo {
 				wsMsg["snr"] = pkt.SNR

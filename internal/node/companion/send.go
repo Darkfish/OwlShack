@@ -57,13 +57,14 @@ func (c *Companion) sendGroupReply(ch *meshcore.ChannelEntry, text string, hashS
 
 	if c.hub != nil {
 		c.hub.Broadcast("messages", map[string]any{
-			"companion": c.cfg.Name,
-			"channel":   ch.Name,
-			"sender":    c.cfg.Name,
-			"text":      text,
-			"direction": "tx",
-			"timestamp": msg.Timestamp.UTC().Format(time.RFC3339),
-			"id":        msgID,
+			"companion":   c.cfg.Name,
+			"companionId": c.cfg.ID,
+			"channel":     ch.Name,
+			"sender":      c.cfg.Name,
+			"text":        text,
+			"direction":   "tx",
+			"timestamp":   msg.Timestamp.UTC().Format(time.RFC3339),
+			"id":          msgID,
 		})
 	}
 
@@ -172,14 +173,15 @@ func (c *Companion) sendDM(pubkeyHex, text string, fallbackHashSize uint8, ackTi
 
 	if c.hub != nil {
 		c.hub.Broadcast("messages", map[string]any{
-			"companion": c.cfg.Name,
-			"channel":   channelKey,
-			"sender":    c.cfg.Name,
-			"text":      text,
-			"direction": "tx",
-			"timestamp": msg.Timestamp.UTC().Format(time.RFC3339),
-			"id":        msg.ID,
-			"status":    "sending",
+			"companion":   c.cfg.Name,
+			"companionId": c.cfg.ID,
+			"channel":     channelKey,
+			"sender":      c.cfg.Name,
+			"text":        text,
+			"direction":   "tx",
+			"timestamp":   msg.Timestamp.UTC().Format(time.RFC3339),
+			"id":          msg.ID,
+			"status":      "sending",
 		})
 	}
 
@@ -221,11 +223,12 @@ func (c *Companion) sendDM(pubkeyHex, text string, fallbackHashSize uint8, ackTi
 
 			if c.hub != nil {
 				c.hub.Broadcast("messages", map[string]any{
-					"action":    "status",
-					"companion": c.cfg.Name,
-					"channel":   channelKey,
-					"id":        msgID,
-					"status":    status,
+					"action":      "status",
+					"companion":   c.cfg.Name,
+					"companionId": c.cfg.ID,
+					"channel":     channelKey,
+					"id":          msgID,
+					"status":      status,
 				})
 			}
 		},

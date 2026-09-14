@@ -20,6 +20,7 @@ func init() {
 }
 
 type CompanionInfo struct {
+	ID        int64         `json:"id"`
 	Name      string        `json:"name"`
 	PubKey    string        `json:"pubkey"`
 	PeerCount int           `json:"peerCount"`
@@ -222,7 +223,7 @@ func (s *Server) routes() {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+	s.mux.ServeHTTP(w, s.resolveCompanionRef(r))
 }
 
 func (s *Server) Hub() *Hub {
