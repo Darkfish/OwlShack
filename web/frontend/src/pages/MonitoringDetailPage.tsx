@@ -335,7 +335,7 @@ export function MonitoringDetailPage() {
       )}
       {showSettings && node?.companionId && node.kind !== "link" && (
         <MonitoringSettings
-          companionName={node.companionId}
+          companionRef={node.companionId}
           pubkey={pubkey}
           kind={node.kind === "companion" ? "companion" : "repeater"}
           onSaved={() => loadMeta()}

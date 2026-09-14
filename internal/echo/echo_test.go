@@ -39,16 +39,16 @@ func TestTrack_TwoCompanionsOnOnePacketDoNotCollide(t *testing.T) {
 	var hash [meshcore.PacketHashSize]byte
 	hash[0] = 9
 
-	tr.Track(hash, 101, "Wes", "#westest")     // the sender
-	tr.Track(hash, 202, "Wes Bot", "#westest") // the other companion receiving the same packet
+	tr.Track(hash, Sent{MessageID: 101, CompanionID: 1, Companion: "Wes", Channel: "#westest"})     // the sender
+	tr.Track(hash, Sent{MessageID: 202, CompanionID: 2, Companion: "Wes Bot", Channel: "#westest"}) // the other companion receiving the same packet
 
 	if len(tr.pending) != 2 {
 		t.Fatalf("pending holds %d entries, want 2 — the second companion overwrote the first", len(tr.pending))
 	}
-	if e := tr.pending[pendingKey{hash: hash, companion: "Wes"}]; e == nil || e.messageID != 101 {
+	if e := tr.pending[pendingKey{hash: hash, companion: "Wes"}]; e == nil || e.sent.MessageID != 101 {
 		t.Errorf("sender's entry = %+v, want messageID 101 still tracked", e)
 	}
-	if e := tr.pending[pendingKey{hash: hash, companion: "Wes Bot"}]; e == nil || e.messageID != 202 {
+	if e := tr.pending[pendingKey{hash: hash, companion: "Wes Bot"}]; e == nil || e.sent.MessageID != 202 {
 		t.Errorf("other companion's entry = %+v, want messageID 202", e)
 	}
 }

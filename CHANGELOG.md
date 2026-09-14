@@ -5,6 +5,35 @@ top until tagged.
 
 ## Unreleased
 
+### Changed
+
+- **Companion URLs no longer break when a companion is renamed.** A companion is now addressed by
+  `/companions/<id>-<slug>` — the id is the authority and the slug is only there to keep the link
+  readable, so a stale slug still resolves. Renaming previously left every open tab and bookmark on
+  a dead URL, because the name was both the display label and the key in all 49 runtime API routes;
+  `/companions/%F0%9F%90%B6Akl/contacts` returned `companion not found` the instant the rename
+  landed, and reloading could not help because the stale name was in the address bar. Plain-name
+  URLs still resolve, so existing bookmarks and installed PWAs keep working.
+- `GET /api/companions` now includes `id`, and the `messages` WebSocket payload now carries
+  `companionId` alongside `companion`. The live-message filter matches on the id, which is known
+  from the URL on the first render and cannot change under a rename; it falls back to the name when
+  a payload has no id rather than dropping the message.
+
+### Fixed
+
+- **A companion path could be steered onto a route it never addressed.** The new ref rewrite split
+  and rebuilt the *decoded* path, so an encoded slash inside the segment passed for a separator:
+  `/api/companions/1-a%2Frepeaters%2FDEAD/cli` addresses `{name}/cli` and should 404, but reached
+  the repeater CLI handler. The substituted name had the same flaw in reverse — nothing constrains
+  a companion name, so one containing `/` spread across segments and both hijacked routes and made
+  its own companion unreachable. Segments are now split and rebuilt on the escaped path. Found
+  before release; no shipped version is affected.
+- **The sidebar kept showing a companion's old name until the page was reloaded.** Config has no
+  WebSocket topic, and the shell only refetched the roster when navigating to or from
+  `/companions` — which a rename from the dialog on that page never does. Every companion mutation
+  now notifies the cached rosters, so the sidebar, the shared companion list and the links built
+  from them update in place.
+
 ## v1.4.0-rc.2 — 2026-09-14
 
 A second candidate. Since rc.1: the three defects found by running rc.1 on a real server are

@@ -48,6 +48,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useCompanionRef } from "@/hooks/useCompanions";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { PageHeader } from "@/components/PageHeader";
 import { ConnectionPill, PeerTypePill } from "@/components/StatusIndicator";
@@ -449,11 +450,12 @@ function CompanionActions({ companion }: { companion: string }) {
 }
 
 export function CompanionDetailPage() {
-  const { name } = useParams<{ name: string }>();
-  const decodedName = useMemo(
-    () => (name ? decodeURIComponent(name) : ""),
-    [name],
-  );
+  const { ref } = useParams<{ ref: string }>();
+  const {
+    ref: companionRef,
+    id: companionId,
+    name: companionName,
+  } = useCompanionRef(ref);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeChannel = searchParams.get("channel");
@@ -526,7 +528,7 @@ export function CompanionDetailPage() {
     ? 151
     : isContact
       ? 155
-      : Math.max(0, 153 - decodedName.length);
+      : Math.max(0, 153 - companionName.length);
 
   const roomPubkey = isRoom ? (activeConversation?.pubkey ?? null) : null;
   const [roomSession, setRoomSession] = useState<RoomSession | null>(null);
@@ -534,11 +536,11 @@ export function CompanionDetailPage() {
 
   useEffect(() => {
     setRoomSession(null);
-    if (!roomPubkey || !decodedName) return;
+    if (!roomPubkey || !companionRef) return;
     let cancelled = false;
     setRoomSessionLoading(true);
     fetch(
-      `/api/companions/${encodeURIComponent(decodedName)}/rooms/${roomPubkey}/session`,
+      `/api/companions/${encodeURIComponent(companionRef)}/rooms/${roomPubkey}/session`,
     )
       .then((r) => (r.ok ? r.json() : null))
       .then((s: RoomSession | null) => {
@@ -551,7 +553,7 @@ export function CompanionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [decodedName, roomPubkey]);
+  }, [companionRef, roomPubkey]);
 
   // /participants is the historical rx-sender list; loaded messages add anyone posting mid-session.
   const mentionEnabled = !!activeConversation && (!isContact || isRoom);
@@ -560,10 +562,10 @@ export function CompanionDetailPage() {
 
   useEffect(() => {
     setFetchedParticipants([]);
-    if (!mentionEnabled || !convoId || !decodedName) return;
+    if (!mentionEnabled || !convoId || !companionRef) return;
     let cancelled = false;
     fetch(
-      `/api/companions/${encodeURIComponent(decodedName)}/conversations/${encodeURIComponent(convoId)}/participants`,
+      `/api/companions/${encodeURIComponent(companionRef)}/conversations/${encodeURIComponent(convoId)}/participants`,
     )
       .then((r) => (r.ok ? r.json() : []))
       .then((d: string[]) => {
@@ -573,17 +575,17 @@ export function CompanionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [mentionEnabled, convoId, decodedName]);
+  }, [mentionEnabled, convoId, companionRef]);
 
   const mentionNames = useMemo(() => {
     if (!mentionEnabled) return [];
     const set = new Set(fetchedParticipants);
     for (const m of messages) {
-      if (m.direction === "rx" && m.sender && m.sender !== decodedName)
+      if (m.direction === "rx" && m.sender && m.sender !== companionName)
         set.add(m.sender);
     }
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [mentionEnabled, fetchedParticipants, messages, decodedName]);
+  }, [mentionEnabled, fetchedParticipants, messages, companionName]);
 
   const roomLoggedIn =
     !!roomSession && roomSession.loggedIn !== false && !!roomSession.pubkeyHex;
@@ -604,12 +606,12 @@ export function CompanionDetailPage() {
   }, [sort]);
 
   const loadConversations = useCallback(async (): Promise<Conversation[]> => {
-    if (!decodedName) return [];
+    if (!companionRef) return [];
     setLoadingList(true);
     setListError(null);
     try {
       const r = await fetch(
-        `/api/companions/${encodeURIComponent(decodedName)}/conversations`,
+        `/api/companions/${encodeURIComponent(companionRef)}/conversations`,
       );
       if (!r.ok) throw new Error("conversations");
       const data: Conversation[] = (await r.json()) || [];
@@ -621,7 +623,7 @@ export function CompanionDetailPage() {
     } finally {
       setLoadingList(false);
     }
-  }, [decodedName]);
+  }, [companionRef]);
 
   useEffect(() => {
     loadConversations();
@@ -629,14 +631,22 @@ export function CompanionDetailPage() {
 
   // Own public key, to flag self-add attempts on shared-contact cards.
   useEffect(() => {
-    if (!decodedName) return;
+    if (!companionRef) return;
     let cancelled = false;
     fetch("/api/companions")
       .then((r) => (r.ok ? r.json() : []))
       .then(
-        (list: { name: string; pubkey?: string; lat?: number; lon?: number }[]) => {
+        (
+          list: {
+            id: number;
+            name: string;
+            pubkey?: string;
+            lat?: number;
+            lon?: number;
+          }[],
+        ) => {
           if (cancelled) return;
-          const me = (list || []).find((c) => c.name === decodedName);
+          const me = (list || []).find((c) => c.id === companionId);
           setOwnPubkey(me?.pubkey ?? null);
           setOwnPos(
             me && me.lat != null && me.lon != null
@@ -649,7 +659,7 @@ export function CompanionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [decodedName]);
+  }, [companionRef, companionId]);
 
   const onAddContact = useCallback((prefill: ContactPrefill) => {
     setAddContactPrefill(prefill);
@@ -659,7 +669,7 @@ export function CompanionDetailPage() {
   const addChannel = useCallback(
     async (channelName: string, privateKey?: string) => {
       try {
-        await postChannel(decodedName, channelName, privateKey);
+        await postChannel(companionRef, channelName, privateKey);
       } catch (e) {
         toast.error(
           `Failed to add channel: ${e instanceof Error ? e.message : "failed"}`,
@@ -677,7 +687,7 @@ export function CompanionDetailPage() {
       );
       setSearchParams({ channel: target ? target.channel : channelName });
     },
-    [decodedName, loadConversations, setSearchParams],
+    [companionRef, loadConversations, setSearchParams],
   );
 
   // The roster already includes every configured channel, seeded server-side.
@@ -724,11 +734,11 @@ export function CompanionDetailPage() {
 
   const initialLoadMessages = useCallback(
     async (channel: string) => {
-      if (!decodedName) return;
+      if (!companionRef) return;
       setLoadingMsgs(true);
       try {
         const r = await fetch(
-          `/api/companions/${encodeURIComponent(decodedName)}/messages?channel=${encodeURIComponent(channel)}&limit=100`,
+          `/api/companions/${encodeURIComponent(companionRef)}/messages?channel=${encodeURIComponent(channel)}&limit=100`,
         );
         if (!r.ok) throw new Error("messages");
         const data: Message[] = await r.json();
@@ -741,12 +751,12 @@ export function CompanionDetailPage() {
         setLoadingMsgs(false);
       }
     },
-    [decodedName],
+    [companionRef],
   );
 
   const backfillMessages = useCallback(
     async (channel: string) => {
-      if (!decodedName) return;
+      if (!companionRef) return;
       const existing = messageCacheRef.current.get(channel) || [];
       const afterId = lastIdOf(existing);
       if (afterId <= 0) {
@@ -755,7 +765,7 @@ export function CompanionDetailPage() {
       }
       try {
         const r = await fetch(
-          `/api/companions/${encodeURIComponent(decodedName)}/messages?channel=${encodeURIComponent(channel)}&afterId=${afterId}&limit=500`,
+          `/api/companions/${encodeURIComponent(companionRef)}/messages?channel=${encodeURIComponent(channel)}&afterId=${afterId}&limit=500`,
         );
         if (!r.ok) return;
         const delta: Message[] = await r.json();
@@ -767,13 +777,13 @@ export function CompanionDetailPage() {
         // backfill is best-effort
       }
     },
-    [decodedName, lastIdOf, initialLoadMessages, activeChannel],
+    [companionRef, lastIdOf, initialLoadMessages, activeChannel],
   );
 
   // Scroll-up paging; pendingPrependRef carries the metrics that preserve the viewport.
   const loadOlderMessages = useCallback(
     async (channel: string) => {
-      if (!decodedName) return;
+      if (!companionRef) return;
       if (reachedStartRef.current.has(channel)) return;
       const existing = messageCacheRef.current.get(channel) || [];
       // existing is ascending (oldest first) — find the smallest real id.
@@ -792,7 +802,7 @@ export function CompanionDetailPage() {
       setLoadingOlder(true);
       try {
         const r = await fetch(
-          `/api/companions/${encodeURIComponent(decodedName)}/messages?channel=${encodeURIComponent(channel)}&beforeId=${oldest}&limit=100`,
+          `/api/companions/${encodeURIComponent(companionRef)}/messages?channel=${encodeURIComponent(channel)}&beforeId=${oldest}&limit=100`,
         );
         if (!r.ok) return;
         const older: Message[] = await r.json();
@@ -817,7 +827,7 @@ export function CompanionDetailPage() {
         setLoadingOlder(false);
       }
     },
-    [decodedName, activeChannel],
+    [companionRef, activeChannel],
   );
 
   const handleMessagesScroll = useCallback(() => {
@@ -864,7 +874,7 @@ export function CompanionDetailPage() {
     reportedReadRef.current.set(activeConversation.id, highest);
 
     fetch(
-      `/api/companions/${encodeURIComponent(decodedName)}/conversations/${encodeURIComponent(activeConversation.id)}/read`,
+      `/api/companions/${encodeURIComponent(companionRef)}/conversations/${encodeURIComponent(activeConversation.id)}/read`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -882,16 +892,25 @@ export function CompanionDetailPage() {
         ),
       );
     }
-  }, [activeChannel, activeConversation, messages, decodedName]);
+  }, [activeChannel, activeConversation, messages, companionRef]);
 
   const handleWsMessage = useCallback(
     (topic: string, data: unknown) => {
       if (topic !== "messages" || !data || typeof data !== "object") return;
       const payload = data as Message & {
         companion?: string;
+        companionId?: number;
         action?: string;
       };
-      if (payload.companion !== decodedName) return;
+      // Match on the id where both sides have one: it is in the URL, so it is known on the first
+      // render, and a rename cannot change it. Falling back to the name rather than dropping keeps
+      // a payload that predates companionId visible instead of silently stalling the thread.
+      const mine =
+        payload.companionId != null && companionId != null
+          ? payload.companionId === companionId
+          : payload.companion === companionName ||
+            payload.companion === companionRef;
+      if (!mine) return;
 
       if (payload.action === "repeatCount" && payload.id != null) {
         const updateRepeat = (m: Message): Message =>
@@ -979,7 +998,13 @@ export function CompanionDetailPage() {
         return updated;
       });
     },
-    [decodedName, activeChannel, loadConversations],
+    [
+      companionRef,
+      companionId,
+      companionName,
+      activeChannel,
+      loadConversations,
+    ],
   );
 
   const { connected } = useWebSocket(["messages"], handleWsMessage);
@@ -1104,12 +1129,12 @@ export function CompanionDetailPage() {
   const openConversation = useCallback(
     (c: Conversation) => {
       if (c.isRepeater && c.pubkey) {
-        navigate(contactDetailPath(decodedName, c.pubkey, true));
+        navigate(contactDetailPath(companionRef, c.pubkey, true));
         return;
       }
       setSearchParams({ channel: c.channel });
     },
-    [decodedName, navigate, setSearchParams],
+    [companionRef, navigate, setSearchParams],
   );
 
   const closeChat = useCallback(() => {
@@ -1138,7 +1163,7 @@ export function CompanionDetailPage() {
     setSending(true);
     try {
       const r = await fetch(
-        `/api/companions/${encodeURIComponent(decodedName)}/messages`,
+        `/api/companions/${encodeURIComponent(companionRef)}/messages`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1156,7 +1181,7 @@ export function CompanionDetailPage() {
     } finally {
       setSending(false);
     }
-  }, [activeConversation, composer, sending, charLimit, decodedName]);
+  }, [activeConversation, composer, sending, charLimit, companionRef]);
 
   const onComposerKey = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1207,7 +1232,7 @@ export function CompanionDetailPage() {
 
   const handleReply = useCallback(
     (m: Message) => {
-      const isOwn = m.direction === "tx" || m.sender === decodedName;
+      const isOwn = m.direction === "tx" || m.sender === companionName;
       const next = isOwn
         ? `${m.text
             .split("\n")
@@ -1223,7 +1248,7 @@ export function CompanionDetailPage() {
         el.setSelectionRange(end, end);
       });
     },
-    [decodedName],
+    [companionName],
   );
 
   const handleDelete = useCallback(
@@ -1253,7 +1278,7 @@ export function CompanionDetailPage() {
       if (!m.id) return;
       try {
         const r = await fetch(
-          `/api/companions/${encodeURIComponent(decodedName)}/messages/${m.id}/retry`,
+          `/api/companions/${encodeURIComponent(companionRef)}/messages/${m.id}/retry`,
           { method: "POST" },
         );
         if (!r.ok) throw new Error("retry");
@@ -1269,7 +1294,7 @@ export function CompanionDetailPage() {
         toast.error("Retry failed");
       }
     },
-    [decodedName],
+    [companionRef],
   );
 
   const handleBlock = useCallback(
@@ -1277,7 +1302,7 @@ export function CompanionDetailPage() {
       if (!activeConversation) return;
       try {
         const r = await fetch(
-          `/api/companions/${encodeURIComponent(decodedName)}/conversations/${encodeURIComponent(activeConversation.id)}/block`,
+          `/api/companions/${encodeURIComponent(companionRef)}/conversations/${encodeURIComponent(activeConversation.id)}/block`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1290,7 +1315,7 @@ export function CompanionDetailPage() {
         toast.error("Block failed");
       }
     },
-    [activeConversation, decodedName],
+    [activeConversation, companionRef],
   );
 
   const openModal = useCallback(
@@ -1306,7 +1331,7 @@ export function CompanionDetailPage() {
       try {
         if (kind === "path") {
           const r = await fetch(
-            `/api/companions/${encodeURIComponent(decodedName)}/messages/${m.id}/path?channel=${encodeURIComponent(m.channel)}`,
+            `/api/companions/${encodeURIComponent(companionRef)}/messages/${m.id}/path?channel=${encodeURIComponent(m.channel)}`,
           );
           if (!r.ok) throw new Error("path");
           setModalPath(await r.json());
@@ -1317,7 +1342,7 @@ export function CompanionDetailPage() {
         } else if (kind === "rxPaths") {
           const [pr, er] = await Promise.all([
             fetch(
-              `/api/companions/${encodeURIComponent(decodedName)}/messages/${m.id}/path?channel=${encodeURIComponent(m.channel)}`,
+              `/api/companions/${encodeURIComponent(companionRef)}/messages/${m.id}/path?channel=${encodeURIComponent(m.channel)}`,
             ),
             fetch(`/api/messages/${m.id}/echoes`),
           ]);
@@ -1330,7 +1355,7 @@ export function CompanionDetailPage() {
         setModalLoading(false);
       }
     },
-    [decodedName],
+    [companionRef],
   );
 
   const closeModal = useCallback(() => {
@@ -1360,7 +1385,7 @@ export function CompanionDetailPage() {
             </span>
           }
           trailing={<ConnectionPill connected={connected} />}
-          actions={<CompanionActions companion={decodedName} />}
+          actions={<CompanionActions companion={companionRef} />}
         />
       </div>
 
@@ -1507,7 +1532,7 @@ export function CompanionDetailPage() {
                   </div>
                 </div>
                 <ChatHeaderMenu
-                  companion={decodedName}
+                  companion={companionRef}
                   conversation={activeConversation}
                   onSearchToggle={() => {
                     setMsgSearchOpen((v) => !v);
@@ -1570,7 +1595,7 @@ export function CompanionDetailPage() {
                     <MessageGroup
                       key={`${group.sender}-${gi}-${group.messages[0].timestamp}`}
                       group={group}
-                      ownName={decodedName}
+                      ownName={companionName}
                       ownPubkey={ownPubkey}
                       onContext={onMessageContext}
                       onReply={handleReply}
@@ -1585,7 +1610,7 @@ export function CompanionDetailPage() {
 
               {isRoom && !roomLoggedIn ? (
                 <RoomJoinBar
-                  companion={decodedName}
+                  companion={companionRef}
                   pubkey={roomPubkey ?? ""}
                   checking={roomSessionLoading}
                   onJoined={setRoomSession}
@@ -1596,9 +1621,9 @@ export function CompanionDetailPage() {
                 {mentionAC.dropdown}
                 <div className="px-3 py-2 flex items-end gap-2">
                   <ComposerAttachMenu
-                    companion={decodedName}
+                    companion={companionRef}
                     ownPubkey={ownPubkey}
-                    ownName={decodedName}
+                    ownName={companionName}
                     ownLat={ownPos?.lat}
                     ownLon={ownPos?.lon}
                     onInsert={insertAtCursor}
@@ -1699,7 +1724,7 @@ export function CompanionDetailPage() {
         <ContextMenu
           msg={contextMsg}
           pos={contextPos}
-          ownName={decodedName}
+          ownName={companionName}
           onCopy={() => {
             handleCopy(contextMsg);
             setContextMsg(null);
@@ -1728,7 +1753,8 @@ export function CompanionDetailPage() {
       )}
 
       <AddContactDialog
-        companion={decodedName}
+        companion={companionRef}
+        companionName={companionName}
         open={addContactOpen}
         onOpenChange={setAddContactOpen}
         initial={addContactPrefill ?? undefined}

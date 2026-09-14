@@ -12,10 +12,18 @@ import (
 	meshcore "github.com/meshcore-go/meshcore-go"
 )
 
+// Sent identifies the message a tracked packet belongs to. A struct rather than four arguments:
+// messageID and companionID are both int64 and adjacent, so a swapped pair would compile and
+// attach every echo to the wrong message.
+type Sent struct {
+	MessageID   int64
+	CompanionID int64
+	Companion   string
+	Channel     string
+}
+
 type entry struct {
-	messageID    int64
-	companion    string
-	channel      string
+	sent         Sent
 	registeredAt time.Time
 }
 
@@ -47,16 +55,14 @@ func NewTracker(st *store.Store, hub *api.Hub, log *slog.Logger) *Tracker {
 	}
 }
 
-func (t *Tracker) Track(hash [meshcore.PacketHashSize]byte, msgID int64, companion, channel string) {
+func (t *Tracker) Track(hash [meshcore.PacketHashSize]byte, sent Sent) {
 	t.mu.Lock()
-	t.pending[pendingKey{hash: hash, companion: companion}] = &entry{
-		messageID:    msgID,
-		companion:    companion,
-		channel:      channel,
+	t.pending[pendingKey{hash: hash, companion: sent.Companion}] = &entry{
+		sent:         sent,
 		registeredAt: time.Now(),
 	}
 	t.mu.Unlock()
-	t.log.Debug("echo tracked", "messageID", msgID, "hash", hash, "companion", companion, "channel", channel)
+	t.log.Debug("echo tracked", "messageID", sent.MessageID, "hash", hash, "companion", sent.Companion, "channel", sent.Channel)
 }
 
 // OnRawPacket is called by each companion for every frame it hears, so companion scopes the lookup
@@ -83,7 +89,7 @@ func (t *Tracker) OnRawPacket(companion string, data []byte, snr float32, rssi i
 	}
 	t.mu.Unlock()
 
-	t.log.Debug("echo matched", "messageID", entry.messageID, "companion", companion, "hash", key.hash, "hops", pkt.PathHashCount())
+	t.log.Debug("echo matched", "messageID", entry.sent.MessageID, "companion", companion, "hash", key.hash, "hops", pkt.PathHashCount())
 
 	var snrPtr *float64
 	var rssiPtr *int8
@@ -94,7 +100,7 @@ func (t *Tracker) OnRawPacket(companion string, data []byte, snr float32, rssi i
 	}
 
 	echo := &store.MessageEcho{
-		MessageID:    entry.messageID,
+		MessageID:    entry.sent.MessageID,
 		ReceivedAt:   time.Now(),
 		PathHashes:   pkt.Path,
 		PathHashSize: int(pkt.PathHashSize()),
@@ -105,7 +111,7 @@ func (t *Tracker) OnRawPacket(companion string, data []byte, snr float32, rssi i
 
 	t.store.WriteAsync(func() {
 		if err := t.store.Echoes.Insert(context.Background(), echo); err != nil {
-			t.log.Error("failed to insert echo", "error", err, "messageID", entry.messageID)
+			t.log.Error("failed to insert echo", "error", err, "messageID", entry.sent.MessageID)
 			return
 		}
 
@@ -113,18 +119,19 @@ func (t *Tracker) OnRawPacket(companion string, data []byte, snr float32, rssi i
 			return
 		}
 
-		count, err := t.store.Messages.IncrementRepeatCount(context.Background(), entry.messageID)
+		count, err := t.store.Messages.IncrementRepeatCount(context.Background(), entry.sent.MessageID)
 		if err != nil {
-			t.log.Error("failed to increment repeat count", "error", err, "messageID", entry.messageID)
+			t.log.Error("failed to increment repeat count", "error", err, "messageID", entry.sent.MessageID)
 			return
 		}
 
 		if t.hub != nil {
 			t.hub.Broadcast("messages", map[string]any{
 				"action":      "repeatCount",
-				"companion":   entry.companion,
-				"channel":     entry.channel,
-				"id":          entry.messageID,
+				"companion":   entry.sent.Companion,
+				"companionId": entry.sent.CompanionID,
+				"channel":     entry.sent.Channel,
+				"id":          entry.sent.MessageID,
 				"repeatCount": count,
 			})
 		}

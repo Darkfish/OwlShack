@@ -51,6 +51,7 @@ import { InlineConfirm } from "@/components/InlineConfirm";
 import { formatDateTime, timeAgo, truncateMid } from "@/lib/format";
 import { contactDetailPath } from "@/lib/routes";
 import { deletePeer } from "@/lib/peerApi";
+import { companionPath, companionRef } from "@/lib/companionRef";
 
 export interface PeerLike {
   pubkey: string;
@@ -67,6 +68,7 @@ export interface PeerLike {
 }
 
 interface CompanionRef {
+  id: number;
   name: string;
   pubkey?: string;
 }
@@ -462,6 +464,7 @@ function PeerDetailBody({
 
 interface MembershipHit {
   companion: string;
+  ref: string;
   isRepeater: boolean;
 }
 
@@ -489,6 +492,7 @@ function usePeerMembership(
             contact
               ? ({
                   companion: c.name,
+                  ref: companionRef(c),
                   isRepeater:
                     contact.metadata?.isRepeater === true ||
                     (contact.type || "").toUpperCase() === "REPEATER",
@@ -525,7 +529,7 @@ function CompanionMembership({
       <span className="label-overline">In companions</span>
       <div className="mt-2 space-y-1.5">
         {hits.map((h) => {
-          const to = contactDetailPath(h.companion, pubkeyHex, h.isRepeater);
+          const to = contactDetailPath(h.ref, pubkeyHex, h.isRepeater);
           return (
             <button
               key={h.companion}
@@ -855,8 +859,9 @@ function ShareInMessageDialog({
   const go = () => {
     if (!companion || !channel) return;
     onOpenChange(false);
+    const target = companions.find((c) => c.name === companion);
     navigate(
-      `/companions/${encodeURIComponent(companion)}?channel=${encodeURIComponent(channel)}&compose=${encodeURIComponent(embed)}`,
+      `${target ? companionPath(target) : `/companions/${encodeURIComponent(companion)}`}?channel=${encodeURIComponent(channel)}&compose=${encodeURIComponent(embed)}`,
     );
   };
 

@@ -19,7 +19,7 @@ import {
   Users,
   Waves,
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -49,6 +49,12 @@ import { type ConfigCompanion } from "@/lib/configApi";
 import { useTheme } from "@/lib/theme";
 import { truncateMid } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useCompanionsChanged } from "@/lib/companionsChanged";
+import {
+  companionIdFromRef,
+  companionPath,
+  findByRef,
+} from "@/lib/companionRef";
 
 type IconType = React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
@@ -224,10 +230,12 @@ function CommsSection({
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobile = () => isMobile && setOpenMobile(false);
 
-  // The selected companion (if any) from /companions/<name>[/...].
+  // The selected companion (if any) from /companions/<ref>[/...].
   const seg = pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  const activeCompanion =
-    seg[0] === "companions" && seg[1] ? seg[1] : null;
+  const activeItem =
+    seg[0] === "companions" && seg[1]
+      ? findByRef(seg[1], companions)
+      : undefined;
 
   return (
     <SidebarGroup>
@@ -256,7 +264,7 @@ function CommsSection({
             {companions.length > 0 && (
               <SidebarMenuSub>
                 {companions.map((c) => {
-                  const active = activeCompanion === c.name;
+                  const active = activeItem === c;
                   return (
                     <SidebarMenuSubItem key={c.id}>
                       <SidebarMenuSubButton
@@ -269,7 +277,7 @@ function CommsSection({
                         )}
                       >
                         <Link
-                          to={`/companions/${encodeURIComponent(c.name)}`}
+                          to={companionPath(c)}
                           onClick={closeMobile}
                           title={c.name}
                         >
@@ -347,6 +355,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       reloadCompanions();
     }
   }, [pathname, reloadCompanions]);
+  useCompanionsChanged(reloadCompanions);
+
+  // A link made before refs existed still resolves, but swapping it for the ref on arrival means
+  // the next rename cannot break the bookmark the user just followed.
+  const navigate = useNavigate();
+  useEffect(() => {
+    const seg = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    if (seg[0] !== "companions" || !seg[1]) return;
+    if (companionIdFromRef(seg[1]) != null) return;
+    const c = (companions ?? []).find((x) => x.name === seg[1]);
+    if (!c) return;
+    const tail = seg.slice(2).map(encodeURIComponent).join("/");
+    navigate(
+      companionPath(c, tail ? `/${tail}` : "") + location.search + location.hash,
+      { replace: true },
+    );
+  }, [pathname, companions, navigate, location.search, location.hash]);
 
   return (
     <SidebarProvider
@@ -472,7 +497,7 @@ function BottomNav({
   const { setOpenMobile } = useSidebar();
   const messagesTo =
     companions.length === 1
-      ? `/companions/${encodeURIComponent(companions[0].name)}`
+      ? companionPath(companions[0])
       : "/companions";
   const items: NavItem[] = [
     PRIMARY[0],
