@@ -21,6 +21,7 @@ import {
   Ban,
   CheckCheck,
   ChevronLeft,
+  ArrowDown,
   ChevronRight,
   Copy,
   CornerUpLeft,
@@ -281,6 +282,9 @@ function splitTrailingPunct(url: string): { url: string; trailing: string } {
   if (!m) return { url, trailing: "" };
   return { url: url.slice(0, m.index), trailing: url.slice(m.index) };
 }
+// How close to the end still counts as following the thread.
+const BOTTOM_SLACK_PX = 80;
+
 const SORT_KEY = "companion-sort";
 
 const HEADER_ACTION_CLASS =
@@ -508,6 +512,12 @@ export function CompanionDetailPage() {
     null,
   );
   const skipAutoScrollRef = useRef(false);
+  // The pane's height as of the last scroll decision. Comparing the reader's position against the
+  // height *before* this render is what says whether they were at the end of the thread — asking
+  // afterwards counts the arriving message itself as distance, and a flag kept from scroll events
+  // is only ever as good as the last event observed.
+  const lastPaneHeightRef = useRef(0);
+  const [unreadBelow, setUnreadBelow] = useState(0);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.channel === activeChannel) ?? null,
@@ -833,6 +843,9 @@ export function CompanionDetailPage() {
   const handleMessagesScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el || !activeChannel) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX) {
+      setUnreadBelow(0);
+    }
     if (
       el.scrollTop <= 80 &&
       !loadingOlder &&
@@ -920,10 +933,12 @@ export function CompanionDetailPage() {
         if (payload.channel) {
           const cached = messageCacheRef.current.get(payload.channel);
           if (cached) {
-            messageCacheRef.current.set(payload.channel, cached.map(updateRepeat));
+            messageCacheRef.current.set(payload.channel, mapChanged(cached, updateRepeat));
           }
         }
-        setMessages((prev) => prev.map(updateRepeat));
+        if (payload.channel === activeChannel) {
+          setMessages((prev) => mapChanged(prev, updateRepeat));
+        }
         return;
       }
 
@@ -935,10 +950,12 @@ export function CompanionDetailPage() {
         if (payload.channel) {
           const cached = messageCacheRef.current.get(payload.channel);
           if (cached) {
-            messageCacheRef.current.set(payload.channel, cached.map(updateStatus));
+            messageCacheRef.current.set(payload.channel, mapChanged(cached, updateStatus));
           }
         }
-        setMessages((prev) => prev.map(updateStatus));
+        if (payload.channel === activeChannel) {
+          setMessages((prev) => mapChanged(prev, updateStatus));
+        }
         return;
       }
 
@@ -1018,8 +1035,12 @@ export function CompanionDetailPage() {
   }, [connected, activeChannel, backfillMessages]);
 
   const initialScrollDoneRef = useRef(false);
+  const lastAutoScrollIdRef = useRef(0);
   useEffect(() => {
     initialScrollDoneRef.current = false;
+    lastAutoScrollIdRef.current = 0;
+    lastPaneHeightRef.current = 0;
+    setUnreadBelow(0);
     setMsgSearch("");
     setMsgSearchOpen(false);
   }, [activeChannel]);
@@ -1035,19 +1056,52 @@ export function CompanionDetailPage() {
   }, [messages]);
 
   useEffect(() => {
+    const pane = scrollContainerRef.current;
     if (loadingMsgs || messages.length === 0) return;
+    const wasAtEnd =
+      !pane ||
+      lastPaneHeightRef.current === 0 ||
+      lastPaneHeightRef.current - pane.scrollTop - pane.clientHeight <=
+        BOTTOM_SLACK_PX;
+    if (pane) lastPaneHeightRef.current = pane.scrollHeight;
     if (skipAutoScrollRef.current) {
       // this messages change was a scroll-up prepend — don't yank to the bottom.
       skipAutoScrollRef.current = false;
       return;
     }
+    // Only something arriving at the bottom moves the view. A status or repeat-count update, or a
+    // re-delivered duplicate, changes the array while adding nothing to read — and yanking the
+    // reader to the bottom for one is indistinguishable from a message they never got.
+    const newest = lastIdOf(messages);
+    if (newest !== 0 && newest <= lastAutoScrollIdRef.current) return;
+    const previous = lastAutoScrollIdRef.current;
+    lastAutoScrollIdRef.current = newest;
+
     if (!initialScrollDoneRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
       initialScrollDoneRef.current = true;
-    } else {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      setUnreadBelow(0);
+      return;
     }
-  }, [messages, loadingMsgs]);
+    // Follow the thread only for a reader already at the end of it, or one who just posted. A
+    // reader scrolled back through history keeps their place and is told what arrived instead.
+    const ownSend = messages[messages.length - 1]?.direction === "tx";
+    if (wasAtEnd || ownSend) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      setUnreadBelow(0);
+      return;
+    }
+    setUnreadBelow(
+      (n) =>
+        n +
+        messages.filter((m) => typeof m.id === "number" && m.id > previous).length,
+    );
+  }, [messages, loadingMsgs, lastIdOf]);
+
+  const jumpToLatest = useCallback(() => {
+    setUnreadBelow(0);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     if (!contextMsg) return;
@@ -1571,41 +1625,55 @@ export function CompanionDetailPage() {
                 </div>
               )}
 
-              <div
-                ref={scrollContainerRef}
-                onScroll={handleMessagesScroll}
-                className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 bg-background/30"
-              >
-                {!loadingMsgs && loadingOlder && (
-                  <div className="flex items-center justify-center py-2 text-muted-foreground/60">
-                    <Loader2 className="size-4 animate-spin" />
-                  </div>
+              <div className="relative flex-1 min-h-0 flex flex-col">
+                <div
+                  ref={scrollContainerRef}
+                  onScroll={handleMessagesScroll}
+                  className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 bg-background/30"
+                >
+                  {!loadingMsgs && loadingOlder && (
+                    <div className="flex items-center justify-center py-2 text-muted-foreground/60">
+                      <Loader2 className="size-4 animate-spin" />
+                    </div>
+                  )}
+                  {loadingMsgs ? (
+                    <MessagesSkeleton />
+                  ) : groupedMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground/50 gap-3">
+                      <MessageSquare className="size-8" strokeWidth={1.2} />
+                      <span className="font-mono text-xs uppercase tracking-[0.12em]">
+                        No transmissions on record
+                      </span>
+                    </div>
+                  ) : (
+                    groupedMessages.map((group, gi) => (
+                      <MessageGroup
+                        key={`${group.sender}-${gi}-${group.messages[0].timestamp}`}
+                        group={group}
+                        ownName={companionName}
+                        ownPubkey={ownPubkey}
+                        onContext={onMessageContext}
+                        onReply={handleReply}
+                        onRetry={handleRetry}
+                        onAddContact={onAddContact}
+                        channelCtx={channelCtx}
+                      />
+                    ))
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {unreadBelow > 0 && (
+                  <button
+                    type="button"
+                    onClick={jumpToLatest}
+                    className="absolute inset-x-0 bottom-3 mx-auto flex w-fit items-center gap-1.5 rounded-sm border border-primary/40 bg-card px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-primary transition-colors hover:bg-primary/10"
+                  >
+                    <ArrowDown className="size-3" />
+                    <span className="tabular-nums">{unreadBelow}</span>
+                    {unreadBelow === 1 ? "new message" : "new messages"}
+                  </button>
                 )}
-                {loadingMsgs ? (
-                  <MessagesSkeleton />
-                ) : groupedMessages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground/50 gap-3">
-                    <MessageSquare className="size-8" strokeWidth={1.2} />
-                    <span className="font-mono text-xs uppercase tracking-[0.12em]">
-                      No transmissions on record
-                    </span>
-                  </div>
-                ) : (
-                  groupedMessages.map((group, gi) => (
-                    <MessageGroup
-                      key={`${group.sender}-${gi}-${group.messages[0].timestamp}`}
-                      group={group}
-                      ownName={companionName}
-                      ownPubkey={ownPubkey}
-                      onContext={onMessageContext}
-                      onReply={handleReply}
-                      onRetry={handleRetry}
-                      onAddContact={onAddContact}
-                      channelCtx={channelCtx}
-                    />
-                  ))
-                )}
-                <div ref={messagesEndRef} />
               </div>
 
               {isRoom && !roomLoggedIn ? (
@@ -1838,6 +1906,19 @@ function convRecency(a: Conversation, b: Conversation): number {
 function tsValue(iso?: string): number {
   if (!iso) return 0;
   return new Date(iso).getTime() || 0;
+}
+
+// Like map, but hands back the original array when nothing changed. A new array identity is what
+// the auto-scroll reads as "new traffic", so an update for a message that is not loaded must not
+// manufacture one.
+function mapChanged(arr: Message[], fn: (m: Message) => Message): Message[] {
+  let changed = false;
+  const next = arr.map((m) => {
+    const updated = fn(m);
+    if (updated !== m) changed = true;
+    return updated;
+  });
+  return changed ? next : arr;
 }
 
 function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
