@@ -920,10 +920,12 @@ export function CompanionDetailPage() {
         if (payload.channel) {
           const cached = messageCacheRef.current.get(payload.channel);
           if (cached) {
-            messageCacheRef.current.set(payload.channel, cached.map(updateRepeat));
+            messageCacheRef.current.set(payload.channel, mapChanged(cached, updateRepeat));
           }
         }
-        setMessages((prev) => prev.map(updateRepeat));
+        if (payload.channel === activeChannel) {
+          setMessages((prev) => mapChanged(prev, updateRepeat));
+        }
         return;
       }
 
@@ -935,10 +937,12 @@ export function CompanionDetailPage() {
         if (payload.channel) {
           const cached = messageCacheRef.current.get(payload.channel);
           if (cached) {
-            messageCacheRef.current.set(payload.channel, cached.map(updateStatus));
+            messageCacheRef.current.set(payload.channel, mapChanged(cached, updateStatus));
           }
         }
-        setMessages((prev) => prev.map(updateStatus));
+        if (payload.channel === activeChannel) {
+          setMessages((prev) => mapChanged(prev, updateStatus));
+        }
         return;
       }
 
@@ -1018,8 +1022,10 @@ export function CompanionDetailPage() {
   }, [connected, activeChannel, backfillMessages]);
 
   const initialScrollDoneRef = useRef(false);
+  const lastAutoScrollIdRef = useRef(0);
   useEffect(() => {
     initialScrollDoneRef.current = false;
+    lastAutoScrollIdRef.current = 0;
     setMsgSearch("");
     setMsgSearchOpen(false);
   }, [activeChannel]);
@@ -1041,13 +1047,19 @@ export function CompanionDetailPage() {
       skipAutoScrollRef.current = false;
       return;
     }
+    // Only something arriving at the bottom moves the view. A status or repeat-count update, or a
+    // re-delivered duplicate, changes the array while adding nothing to read — and yanking the
+    // reader to the bottom for one is indistinguishable from a message they never got.
+    const newest = lastIdOf(messages);
+    if (newest !== 0 && newest <= lastAutoScrollIdRef.current) return;
+    lastAutoScrollIdRef.current = newest;
     if (!initialScrollDoneRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
       initialScrollDoneRef.current = true;
     } else {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, loadingMsgs]);
+  }, [messages, loadingMsgs, lastIdOf]);
 
   useEffect(() => {
     if (!contextMsg) return;
@@ -1838,6 +1850,19 @@ function convRecency(a: Conversation, b: Conversation): number {
 function tsValue(iso?: string): number {
   if (!iso) return 0;
   return new Date(iso).getTime() || 0;
+}
+
+// Like map, but hands back the original array when nothing changed. A new array identity is what
+// the auto-scroll reads as "new traffic", so an update for a message that is not loaded must not
+// manufacture one.
+function mapChanged(arr: Message[], fn: (m: Message) => Message): Message[] {
+  let changed = false;
+  const next = arr.map((m) => {
+    const updated = fn(m);
+    if (updated !== m) changed = true;
+    return updated;
+  });
+  return changed ? next : arr;
 }
 
 function mergeMessages(existing: Message[], incoming: Message[]): Message[] {

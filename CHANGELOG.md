@@ -5,6 +5,19 @@ top until tagged.
 
 ## Unreleased
 
+### Fixed
+
+- **A message in one thread scrolled a different thread to the bottom.** Reading a channel and
+  receiving traffic anywhere else yanked the view down, losing the reader's place. Receiving a
+  channel message registers its packet with the echo tracker, so a repeater repeating it — routine
+  on a mesh — broadcast a `repeatCount` for *that* thread; the handler applied it with
+  `setMessages(prev => prev.map(...))` without checking which thread it belonged to, and `map`
+  hands back a new array even when nothing matched. The auto-scroll watches that array's identity,
+  so a new array read as new traffic. Status updates took the same path. Updates now apply only to
+  the thread they name, an update that changes nothing keeps the existing array, and the
+  auto-scroll fires on a message arriving rather than on any change — so a repeat count or a
+  delivery status landing on the open thread no longer moves the view either.
+
 ### Changed
 
 - **Companion URLs no longer break when a companion is renamed.** A companion is now addressed by
