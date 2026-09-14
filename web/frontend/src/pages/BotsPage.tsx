@@ -51,6 +51,15 @@ const TYPE_OPTS = [
 // rss and cap both poll a feed on a schedule; only what they do with an item differs.
 const isFeedType = (t: string) => t === "rss" || t === "cap";
 
+// Mirroring answers with the size the message arrived on, so it only means anything for a trigger
+// that is answering one. Cron and the feeds start the conversation themselves.
+const answersAMessage = (t: string) => t === "group" || t === "dm";
+
+const PATH_HASH_SIZES = [1, 2, 4].map((n) => ({
+  value: String(n),
+  label: `${n} byte${n > 1 ? "s" : ""}`,
+}));
+
 const POLL_UNITS = [
   { value: "m", label: "minutes" },
   { value: "h", label: "hours" },
@@ -454,6 +463,17 @@ function BotEditor({
   );
   const [saving, setSaving] = useState(false);
 
+  // Say what "default" resolves to rather than printing a number that is only right sometimes: a
+  // companion with no size of its own inherits the radio setting.
+  const pathHashSizeHint = useMemo(() => {
+    if (pathHashSize === "0") return "answers with the size the message arrived on";
+    if (pathHashSize !== "default") return undefined;
+    const own = companions.find((c) => c.id === companionId)?.pathHashSize;
+    return own != null
+      ? `this companion sends ${own} byte${own > 1 ? "s" : ""}`
+      : "this companion inherits the size from Settings";
+  }, [pathHashSize, companions, companionId]);
+
   // A trigger can only target channels its companion already has.
   const companionChannels = useMemo(
     () => channels.filter((ch) => ch.companionId === companionId),
@@ -476,6 +496,7 @@ function BotEditor({
   // them across a type change would only produce a save the server rejects.
   const changeType = (next: string) => {
     if (isFeedType(next) !== isFeedType(type)) setMatch([]);
+    if (!answersAMessage(next) && pathHashSize === "0") setPathHashSize("default");
     setType(next);
   };
 
@@ -724,13 +745,14 @@ function BotEditor({
               label="Path hash size"
               value={pathHashSize}
               options={[
-                { value: "default", label: "default (1)" },
-                { value: "0", label: "mirror incoming" },
-                { value: "1", label: "1 byte" },
-                { value: "2", label: "2 bytes" },
-                { value: "4", label: "4 bytes" },
+                { value: "default", label: "default (companion setting)" },
+                ...(answersAMessage(type)
+                  ? [{ value: "0", label: "mirror incoming" }]
+                  : []),
+                ...PATH_HASH_SIZES,
               ]}
               onChange={setPathHashSize}
+              hint={pathHashSizeHint}
             />
           </div>
 

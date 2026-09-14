@@ -33,6 +33,15 @@ type TriggerConfig struct {
 	URL string `json:"url,omitempty" yaml:"url,omitempty" toml:"url,omitempty"` // Feed to poll, for rss and cap triggers
 }
 
+// MirrorIncomingPathHashSize is the pathHashSize that means "answer with whatever size came in",
+// rather than a byte count of its own.
+const MirrorIncomingPathHashSize = 0
+
+// mirrorsIncoming reports whether this trigger answers a message, and so has one to mirror.
+func (t *TriggerConfig) mirrorsIncoming() bool {
+	return t.Type == "channel" || t.Type == "group" || t.Type == "dm"
+}
+
 // Validate rejects trigger configs that would fail companion construction, which after a reload exits the process.
 func (t *TriggerConfig) Validate() error {
 	switch t.Type {
@@ -119,8 +128,16 @@ func (t *TriggerConfig) Validate() error {
 		}
 	}
 
-	if t.PathHashSize != nil && *t.PathHashSize > 4 {
-		return fmt.Errorf("pathHashSize must be 0-4")
+	if t.PathHashSize != nil {
+		if *t.PathHashSize > 4 {
+			return fmt.Errorf("pathHashSize must be 0-4")
+		}
+		// 0 means "mirror the incoming message". Nothing comes in to mirror on a scheduled or
+		// feed trigger, and silently falling back to the companion's size would leave the config
+		// saying one thing and the radio doing another.
+		if *t.PathHashSize == MirrorIncomingPathHashSize && !t.mirrorsIncoming() {
+			return fmt.Errorf("%s trigger cannot mirror an incoming pathHashSize: it answers no message", t.Type)
+		}
 	}
 
 	return nil

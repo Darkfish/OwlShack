@@ -6,7 +6,7 @@ import (
 )
 
 func cronTrigger(tmpl string) *TriggerConfig {
-	t := &TriggerConfig{Type: "cron", Schedule: "*/5 * * * *"}
+	t := &TriggerConfig{Type: "cron", Template: "x", Schedule: "*/5 * * * *"}
 	t.Template = tmpl
 	return t
 }
@@ -34,5 +34,36 @@ func TestValidate_RejectsUnknownFunction(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid template") {
 		t.Errorf("got %v", err)
+	}
+}
+
+// Mirroring answers an incoming message with the size it arrived on. A scheduled or feed trigger
+// answers nothing, so asking it to mirror is a config that cannot mean what it says.
+func TestTriggerConfig_MirrorPathHashSizeNeedsAnIncomingMessage(t *testing.T) {
+	t.Parallel()
+	mirror := uint8(MirrorIncomingPathHashSize)
+	twoBytes := uint8(2)
+
+	for _, tc := range []struct {
+		name    string
+		cfg     TriggerConfig
+		wantErr bool
+	}{
+		{"group mirrors", TriggerConfig{Type: "group", Template: "x", Channels: &ChannelList{{Name: "Public"}}, PathHashSize: &mirror}, false},
+		{"dm mirrors", TriggerConfig{Type: "dm", Template: "x", PathHashSize: &mirror}, false},
+		{"cron cannot mirror", TriggerConfig{Type: "cron", Template: "x", Schedule: "@every 1h", Contacts: &[]string{"aa"}, PathHashSize: &mirror}, true},
+		{"rss cannot mirror", TriggerConfig{Type: "rss", Template: "x", URL: "https://example.org/f.xml", Contacts: &[]string{"aa"}, PathHashSize: &mirror}, true},
+		{"cap cannot mirror", TriggerConfig{Type: "cap", Template: "x", URL: "https://example.org/f.xml", Contacts: &[]string{"aa"}, PathHashSize: &mirror}, true},
+		{"cron takes a fixed size", TriggerConfig{Type: "cron", Template: "x", Schedule: "@every 1h", Contacts: &[]string{"aa"}, PathHashSize: &twoBytes}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.Validate()
+			if tc.wantErr && err == nil {
+				t.Errorf("%s accepted a mirror pathHashSize; it answers no message", tc.cfg.Type)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("rejected a valid config: %v", err)
+			}
+		})
 	}
 }
