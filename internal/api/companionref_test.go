@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/meshcore-go/OwlShack/internal/store"
@@ -36,6 +37,10 @@ func refServer(t *testing.T, names ...string) (*Server, func(path string) (int, 
 	})
 	s.mux.HandleFunc("GET /api/peers/{name}", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.PathValue("name")))
+	})
+	// A deeper route, to show whether a rewrite can move a request onto one it did not address.
+	s.mux.HandleFunc("GET /api/companions/{name}/repeaters/{pubkey}/cli", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("CLI:" + r.PathValue("name") + ":" + r.PathValue("pubkey")))
 	})
 
 	return s, func(path string) (int, string) {
@@ -120,5 +125,32 @@ func TestParseCompanionRef(t *testing.T) {
 		if id != tc.wantID || ok != tc.wantOK {
 			t.Errorf("parseCompanionRef(%q) = %d,%v; want %d,%v", tc.seg, id, ok, tc.wantID, tc.wantOK)
 		}
+	}
+}
+
+// A path segment is one segment however it is spelled: an encoded slash inside the ref must not
+// let the request cross into a route its escaped path never addressed.
+func TestCompanionRef_EncodedSlashCannotCrossRoutes(t *testing.T) {
+	t.Parallel()
+	_, get := refServer(t, "🐶Akl")
+
+	code, body := get("/api/companions/1-a%2Frepeaters%2FDEAD/cli")
+	if strings.HasPrefix(body, "CLI:") {
+		t.Errorf("reached the repeater CLI route (%d %q); the request addressed {name}/cli", code, body)
+	}
+}
+
+// Same rule on the way out: a companion whose name contains a slash must not spread across
+// segments when it is substituted back into the path.
+func TestCompanionRef_NameWithSlashStaysOneSegment(t *testing.T) {
+	t.Parallel()
+	_, get := refServer(t, "evil/repeaters/DEAD")
+
+	if code, body := get("/api/companions/1/cli"); strings.HasPrefix(body, "CLI:") {
+		t.Errorf("a companion name steered the request onto the CLI route (%d %q)", code, body)
+	}
+	// And it must still be reachable by its own ref.
+	if code, body := get("/api/companions/1-evil-repeaters-dead/messages"); body != "evil/repeaters/DEAD" {
+		t.Errorf("name = %d %q, want %q", code, body, "evil/repeaters/DEAD")
 	}
 }

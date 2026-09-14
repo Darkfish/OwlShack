@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { companionIdFromRef } from "@/lib/companionRef";
+import { companionIdFromRef, findByRef } from "@/lib/companionRef";
 import { useCompanionsChanged } from "@/lib/companionsChanged";
 
 // A companion reference as exposed by GET /api/companions.
@@ -73,12 +73,10 @@ export function useCompanionRef(ref: string | undefined): {
   const companions = useCompanions();
   return useMemo(() => {
     const seg = ref ?? "";
+    const c = findByRef(seg, companions);
+    if (c) return { ref: seg, id: c.id, name: c.name };
+    // Unresolved: a plain-name link is its own name, an id ref has none until the list arrives.
     const id = companionIdFromRef(seg);
-    if (id == null) return { ref: seg, id: null, name: seg };
-    return {
-      ref: seg,
-      id,
-      name: companions.find((c) => c.id === id)?.name ?? "",
-    };
+    return { ref: seg, id, name: id == null ? seg : "" };
   }, [ref, companions]);
 }

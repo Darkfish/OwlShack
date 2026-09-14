@@ -21,6 +21,13 @@ top until tagged.
 
 ### Fixed
 
+- **A companion path could be steered onto a route it never addressed.** The new ref rewrite split
+  and rebuilt the *decoded* path, so an encoded slash inside the segment passed for a separator:
+  `/api/companions/1-a%2Frepeaters%2FDEAD/cli` addresses `{name}/cli` and should 404, but reached
+  the repeater CLI handler. The substituted name had the same flaw in reverse — nothing constrains
+  a companion name, so one containing `/` spread across segments and both hijacked routes and made
+  its own companion unreachable. Segments are now split and rebuilt on the escaped path. Found
+  before release; no shipped version is affected.
 - **The sidebar kept showing a companion's old name until the page was reloaded.** Config has no
   WebSocket topic, and the shell only refetched the roster when navigating to or from
   `/companions` — which a rename from the dialog on that page never does. Every companion mutation

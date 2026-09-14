@@ -53,7 +53,7 @@ import { useCompanionsChanged } from "@/lib/companionsChanged";
 import {
   companionIdFromRef,
   companionPath,
-  refMatches,
+  findByRef,
 } from "@/lib/companionRef";
 
 type IconType = React.ComponentType<React.SVGProps<SVGSVGElement>>;
@@ -232,8 +232,10 @@ function CommsSection({
 
   // The selected companion (if any) from /companions/<ref>[/...].
   const seg = pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  const activeCompanion =
-    seg[0] === "companions" && seg[1] ? seg[1] : null;
+  const activeItem =
+    seg[0] === "companions" && seg[1]
+      ? findByRef(seg[1], companions)
+      : undefined;
 
   return (
     <SidebarGroup>
@@ -262,8 +264,7 @@ function CommsSection({
             {companions.length > 0 && (
               <SidebarMenuSub>
                 {companions.map((c) => {
-                  const active =
-                    activeCompanion != null && refMatches(activeCompanion, c);
+                  const active = activeItem === c;
                   return (
                     <SidebarMenuSubItem key={c.id}>
                       <SidebarMenuSubButton

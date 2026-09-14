@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -15,11 +16,18 @@ const companionPathPrefix = "/api/companions/"
 // A segment that is not an id reference is left alone, and so is one naming an id that no longer
 // exists: name-keyed URLs predate this and must keep working for bookmarks and installed PWAs.
 func (s *Server) resolveCompanionRef(r *http.Request) *http.Request {
-	rest, found := strings.CutPrefix(r.URL.Path, companionPathPrefix)
+	// Split and rebuild on the escaped path throughout. A "%2F" is data inside a segment, and
+	// treating the decoded path as the source would let one pass for a separator and move the
+	// request onto a route its escaped path never addressed.
+	escRest, found := strings.CutPrefix(r.URL.EscapedPath(), companionPathPrefix)
 	if !found {
 		return r
 	}
-	seg, tail, hasTail := strings.Cut(rest, "/")
+	escSeg, escTail, hasTail := strings.Cut(escRest, "/")
+	seg, err := url.PathUnescape(escSeg)
+	if err != nil {
+		return r
+	}
 	id, isRef := parseCompanionRef(seg)
 	if !isRef {
 		return r
@@ -34,12 +42,18 @@ func (s *Server) resolveCompanionRef(r *http.Request) *http.Request {
 	}
 
 	out := r.Clone(r.Context())
+	// Nothing constrains a companion name, so PathEscape is what keeps one containing "/" inside
+	// its own segment rather than steering the request somewhere else.
 	out.URL.Path = companionPathPrefix + c.Name
+	out.URL.RawPath = companionPathPrefix + url.PathEscape(c.Name)
 	if hasTail {
+		tail, err := url.PathUnescape(escTail)
+		if err != nil {
+			return r
+		}
 		out.URL.Path += "/" + tail
+		out.URL.RawPath += "/" + escTail
 	}
-	// Cleared so EscapedPath re-encodes from the name we just substituted.
-	out.URL.RawPath = ""
 	return out
 }
 
@@ -47,9 +61,6 @@ func (s *Server) resolveCompanionRef(r *http.Request) *http.Request {
 // against the current name: a stale slug in an old link must still resolve.
 func parseCompanionRef(seg string) (int64, bool) {
 	digits, _, _ := strings.Cut(seg, "-")
-	if digits == "" {
-		return 0, false
-	}
 	id, err := strconv.ParseInt(digits, 10, 64)
 	if err != nil || id <= 0 {
 		return 0, false

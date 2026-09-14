@@ -15,6 +15,7 @@ import (
 	meshcore "github.com/meshcore-go/meshcore-go"
 	"github.com/meshcore-go/meshcore-go/node"
 
+	"github.com/meshcore-go/OwlShack/internal/echo"
 	"github.com/meshcore-go/OwlShack/internal/meshpath"
 	"github.com/meshcore-go/OwlShack/internal/store"
 	"github.com/meshcore-go/OwlShack/internal/trigger"
@@ -244,7 +245,12 @@ func (c *Companion) registerPacketHandlers() {
 		if msgID == 0 {
 			return
 		}
-		c.echoTracker.Track(pkt.PacketHash(), msgID, c.cfg.ID, c.cfg.Name, channel)
+		c.echoTracker.Track(pkt.PacketHash(), echo.Sent{
+			MessageID:   msgID,
+			CompanionID: c.cfg.ID,
+			Companion:   c.cfg.Name,
+			Channel:     channel,
+		})
 	})
 
 	c.node.OnPacket(meshcore.PayloadTypeAdvert, func(pkt *meshcore.Packet) {
@@ -377,7 +383,12 @@ func (c *Companion) registerPacketHandlers() {
 			}
 
 			if c.echoTracker != nil && msg.ID != 0 {
-				c.echoTracker.Track(pkt.PacketHash(), msg.ID, c.cfg.ID, c.cfg.Name, ch.Name)
+				c.echoTracker.Track(pkt.PacketHash(), echo.Sent{
+					MessageID:   msg.ID,
+					CompanionID: c.cfg.ID,
+					Companion:   c.cfg.Name,
+					Channel:     ch.Name,
+				})
 			}
 
 			c.log.Debug("message received",

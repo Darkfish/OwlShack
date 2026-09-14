@@ -15,16 +15,22 @@ export function companionIdFromRef(ref: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-export function companionPath(c: { id: number; name: string }, rest = ""): string {
+export function companionPath(
+  c: { id: number; name: string },
+  rest = "",
+): string {
   return `/companions/${companionRef(c)}${rest}`;
 }
 
-// Whether a :ref path segment addresses this companion, by id for a ref and by name for a link
-// made before refs existed.
-export function refMatches(
+// Resolve a :ref segment the way the server does, or the two disagree about which companion a URL
+// addresses: an exact name wins, so a companion genuinely named "7" keeps its own URL even when
+// another companion has id 7, and only then is the segment read as an id.
+export function findByRef<T extends { id: number; name: string }>(
   seg: string,
-  c: { id: number; name: string },
-): boolean {
+  companions: T[],
+): T | undefined {
+  const named = companions.find((c) => c.name === seg);
+  if (named) return named;
   const id = companionIdFromRef(seg);
-  return id != null ? id === c.id : seg === c.name;
+  return id == null ? undefined : companions.find((c) => c.id === id);
 }

@@ -47,7 +47,7 @@ export function AddContactDialog({
   onAdded,
 }: {
   companion: string;
-  companionName?: string;
+  companionName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: ContactPrefill;

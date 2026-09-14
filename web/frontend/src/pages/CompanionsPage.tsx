@@ -28,7 +28,7 @@ import { PATH_HASH_SIZE_OPTIONS, SelectField, TextField } from "@/components/Con
 import { PositionPicker, round6 } from "@/components/PositionPicker";
 import { PeerListField, type PickablePeer } from "@/components/PeerPicker";
 import { truncateMid } from "@/lib/format";
-import { companionPath, refMatches } from "@/lib/companionRef";
+import { companionPath, findByRef } from "@/lib/companionRef";
 import { notifyCompanionsChanged } from "@/lib/companionsChanged";
 
 // A companion decrypts a DM against every peer it has heard advertise, so the policy is the only gate.
@@ -68,7 +68,7 @@ export function CompanionsPage() {
   const editRef = params.get("edit");
   useEffect(() => {
     if (!editRef || !companions) return;
-    const target = companions.find((c) => refMatches(editRef, c));
+    const target = findByRef(editRef, companions);
     if (target) setEditing(target);
     setParams({}, { replace: true });
   }, [editRef, companions, setParams]);
