@@ -512,9 +512,11 @@ export function CompanionDetailPage() {
     null,
   );
   const skipAutoScrollRef = useRef(false);
-  // Whether the reader is parked at the newest message. Following the thread means new messages
-  // scroll into view; reading back through it means they must not move the page.
-  const atBottomRef = useRef(true);
+  // The pane's height as of the last scroll decision. Comparing the reader's position against the
+  // height *before* this render is what says whether they were at the end of the thread — asking
+  // afterwards counts the arriving message itself as distance, and a flag kept from scroll events
+  // is only ever as good as the last event observed.
+  const lastPaneHeightRef = useRef(0);
   const [unreadBelow, setUnreadBelow] = useState(0);
 
   const activeConversation = useMemo(
@@ -841,9 +843,9 @@ export function CompanionDetailPage() {
   const handleMessagesScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el || !activeChannel) return;
-    atBottomRef.current =
-      el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX;
-    if (atBottomRef.current) setUnreadBelow(0);
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX) {
+      setUnreadBelow(0);
+    }
     if (
       el.scrollTop <= 80 &&
       !loadingOlder &&
@@ -1037,7 +1039,7 @@ export function CompanionDetailPage() {
   useEffect(() => {
     initialScrollDoneRef.current = false;
     lastAutoScrollIdRef.current = 0;
-    atBottomRef.current = true;
+    lastPaneHeightRef.current = 0;
     setUnreadBelow(0);
     setMsgSearch("");
     setMsgSearchOpen(false);
@@ -1054,7 +1056,14 @@ export function CompanionDetailPage() {
   }, [messages]);
 
   useEffect(() => {
+    const pane = scrollContainerRef.current;
     if (loadingMsgs || messages.length === 0) return;
+    const wasAtEnd =
+      !pane ||
+      lastPaneHeightRef.current === 0 ||
+      lastPaneHeightRef.current - pane.scrollTop - pane.clientHeight <=
+        BOTTOM_SLACK_PX;
+    if (pane) lastPaneHeightRef.current = pane.scrollHeight;
     if (skipAutoScrollRef.current) {
       // this messages change was a scroll-up prepend — don't yank to the bottom.
       skipAutoScrollRef.current = false;
@@ -1077,7 +1086,7 @@ export function CompanionDetailPage() {
     // Follow the thread only for a reader already at the end of it, or one who just posted. A
     // reader scrolled back through history keeps their place and is told what arrived instead.
     const ownSend = messages[messages.length - 1]?.direction === "tx";
-    if (atBottomRef.current || ownSend) {
+    if (wasAtEnd || ownSend) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       setUnreadBelow(0);
       return;
@@ -1090,7 +1099,6 @@ export function CompanionDetailPage() {
   }, [messages, loadingMsgs, lastIdOf]);
 
   const jumpToLatest = useCallback(() => {
-    atBottomRef.current = true;
     setUnreadBelow(0);
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
