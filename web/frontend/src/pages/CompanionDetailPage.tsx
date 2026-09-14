@@ -21,6 +21,7 @@ import {
   Ban,
   CheckCheck,
   ChevronLeft,
+  ArrowDown,
   ChevronRight,
   Copy,
   CornerUpLeft,
@@ -281,6 +282,9 @@ function splitTrailingPunct(url: string): { url: string; trailing: string } {
   if (!m) return { url, trailing: "" };
   return { url: url.slice(0, m.index), trailing: url.slice(m.index) };
 }
+// How close to the end still counts as following the thread.
+const BOTTOM_SLACK_PX = 80;
+
 const SORT_KEY = "companion-sort";
 
 const HEADER_ACTION_CLASS =
@@ -508,6 +512,10 @@ export function CompanionDetailPage() {
     null,
   );
   const skipAutoScrollRef = useRef(false);
+  // Whether the reader is parked at the newest message. Following the thread means new messages
+  // scroll into view; reading back through it means they must not move the page.
+  const atBottomRef = useRef(true);
+  const [unreadBelow, setUnreadBelow] = useState(0);
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.channel === activeChannel) ?? null,
@@ -833,6 +841,9 @@ export function CompanionDetailPage() {
   const handleMessagesScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el || !activeChannel) return;
+    atBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX;
+    if (atBottomRef.current) setUnreadBelow(0);
     if (
       el.scrollTop <= 80 &&
       !loadingOlder &&
@@ -1026,6 +1037,8 @@ export function CompanionDetailPage() {
   useEffect(() => {
     initialScrollDoneRef.current = false;
     lastAutoScrollIdRef.current = 0;
+    atBottomRef.current = true;
+    setUnreadBelow(0);
     setMsgSearch("");
     setMsgSearchOpen(false);
   }, [activeChannel]);
@@ -1052,14 +1065,35 @@ export function CompanionDetailPage() {
     // reader to the bottom for one is indistinguishable from a message they never got.
     const newest = lastIdOf(messages);
     if (newest !== 0 && newest <= lastAutoScrollIdRef.current) return;
+    const previous = lastAutoScrollIdRef.current;
     lastAutoScrollIdRef.current = newest;
+
     if (!initialScrollDoneRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
       initialScrollDoneRef.current = true;
-    } else {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      setUnreadBelow(0);
+      return;
     }
+    // Follow the thread only for a reader already at the end of it, or one who just posted. A
+    // reader scrolled back through history keeps their place and is told what arrived instead.
+    const ownSend = messages[messages.length - 1]?.direction === "tx";
+    if (atBottomRef.current || ownSend) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      setUnreadBelow(0);
+      return;
+    }
+    setUnreadBelow(
+      (n) =>
+        n +
+        messages.filter((m) => typeof m.id === "number" && m.id > previous).length,
+    );
   }, [messages, loadingMsgs, lastIdOf]);
+
+  const jumpToLatest = useCallback(() => {
+    atBottomRef.current = true;
+    setUnreadBelow(0);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     if (!contextMsg) return;
@@ -1583,41 +1617,55 @@ export function CompanionDetailPage() {
                 </div>
               )}
 
-              <div
-                ref={scrollContainerRef}
-                onScroll={handleMessagesScroll}
-                className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 bg-background/30"
-              >
-                {!loadingMsgs && loadingOlder && (
-                  <div className="flex items-center justify-center py-2 text-muted-foreground/60">
-                    <Loader2 className="size-4 animate-spin" />
-                  </div>
+              <div className="relative flex-1 min-h-0 flex flex-col">
+                <div
+                  ref={scrollContainerRef}
+                  onScroll={handleMessagesScroll}
+                  className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 bg-background/30"
+                >
+                  {!loadingMsgs && loadingOlder && (
+                    <div className="flex items-center justify-center py-2 text-muted-foreground/60">
+                      <Loader2 className="size-4 animate-spin" />
+                    </div>
+                  )}
+                  {loadingMsgs ? (
+                    <MessagesSkeleton />
+                  ) : groupedMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground/50 gap-3">
+                      <MessageSquare className="size-8" strokeWidth={1.2} />
+                      <span className="font-mono text-xs uppercase tracking-[0.12em]">
+                        No transmissions on record
+                      </span>
+                    </div>
+                  ) : (
+                    groupedMessages.map((group, gi) => (
+                      <MessageGroup
+                        key={`${group.sender}-${gi}-${group.messages[0].timestamp}`}
+                        group={group}
+                        ownName={companionName}
+                        ownPubkey={ownPubkey}
+                        onContext={onMessageContext}
+                        onReply={handleReply}
+                        onRetry={handleRetry}
+                        onAddContact={onAddContact}
+                        channelCtx={channelCtx}
+                      />
+                    ))
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {unreadBelow > 0 && (
+                  <button
+                    type="button"
+                    onClick={jumpToLatest}
+                    className="absolute inset-x-0 bottom-3 mx-auto flex w-fit items-center gap-1.5 rounded-sm border border-primary/40 bg-card px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-primary transition-colors hover:bg-primary/10"
+                  >
+                    <ArrowDown className="size-3" />
+                    <span className="tabular-nums">{unreadBelow}</span>
+                    {unreadBelow === 1 ? "new message" : "new messages"}
+                  </button>
                 )}
-                {loadingMsgs ? (
-                  <MessagesSkeleton />
-                ) : groupedMessages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground/50 gap-3">
-                    <MessageSquare className="size-8" strokeWidth={1.2} />
-                    <span className="font-mono text-xs uppercase tracking-[0.12em]">
-                      No transmissions on record
-                    </span>
-                  </div>
-                ) : (
-                  groupedMessages.map((group, gi) => (
-                    <MessageGroup
-                      key={`${group.sender}-${gi}-${group.messages[0].timestamp}`}
-                      group={group}
-                      ownName={companionName}
-                      ownPubkey={ownPubkey}
-                      onContext={onMessageContext}
-                      onReply={handleReply}
-                      onRetry={handleRetry}
-                      onAddContact={onAddContact}
-                      channelCtx={channelCtx}
-                    />
-                  ))
-                )}
-                <div ref={messagesEndRef} />
               </div>
 
               {isRoom && !roomLoggedIn ? (
