@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { companionIdFromRef } from "@/lib/companionRef";
+import { useCompanionsChanged } from "@/lib/companionsChanged";
 
 // A companion reference as exposed by GET /api/companions.
 export interface CompanionRef {
@@ -47,7 +48,15 @@ export function useCompanions(): CompanionRef[] {
     };
   }, []);
 
+  // A rename does not remount these pages, so mount-time revalidation alone leaves a stale name.
+  useCompanionsChanged(refreshCompanions);
+
   return companions;
+}
+
+function refreshCompanions(): void {
+  inflight = null;
+  fetchCompanions();
 }
 
 // useCompanionRef reads the :ref route segment. Use `ref` for links and API paths, where it must

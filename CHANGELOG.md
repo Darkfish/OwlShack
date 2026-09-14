@@ -19,6 +19,14 @@ top until tagged.
   from the URL on the first render and cannot change under a rename; it falls back to the name when
   a payload has no id rather than dropping the message.
 
+### Fixed
+
+- **The sidebar kept showing a companion's old name until the page was reloaded.** Config has no
+  WebSocket topic, and the shell only refetched the roster when navigating to or from
+  `/companions` — which a rename from the dialog on that page never does. Every companion mutation
+  now notifies the cached rosters, so the sidebar, the shared companion list and the links built
+  from them update in place.
+
 ## v1.4.0-rc.2 — 2026-09-14
 
 A second candidate. Since rc.1: the three defects found by running rc.1 on a real server are

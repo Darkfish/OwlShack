@@ -49,6 +49,7 @@ import { type ConfigCompanion } from "@/lib/configApi";
 import { useTheme } from "@/lib/theme";
 import { truncateMid } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useCompanionsChanged } from "@/lib/companionsChanged";
 import {
   companionIdFromRef,
   companionPath,
@@ -353,6 +354,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       reloadCompanions();
     }
   }, [pathname, reloadCompanions]);
+  useCompanionsChanged(reloadCompanions);
 
   // A link made before refs existed still resolves, but swapping it for the ref on arrival means
   // the next rename cannot break the bookmark the user just followed.

@@ -28,7 +28,8 @@ import { PATH_HASH_SIZE_OPTIONS, SelectField, TextField } from "@/components/Con
 import { PositionPicker, round6 } from "@/components/PositionPicker";
 import { PeerListField, type PickablePeer } from "@/components/PeerPicker";
 import { truncateMid } from "@/lib/format";
-import { companionPath } from "@/lib/companionRef";
+import { companionPath, refMatches } from "@/lib/companionRef";
+import { notifyCompanionsChanged } from "@/lib/companionsChanged";
 
 // A companion decrypts a DM against every peer it has heard advertise, so the policy is the only gate.
 const DM_POLICY_OPTIONS = [
@@ -64,13 +65,13 @@ export function CompanionsPage() {
   const [confirming, setConfirming] = useState<number | null>(null);
 
   const [params, setParams] = useSearchParams();
-  const editName = params.get("edit");
+  const editRef = params.get("edit");
   useEffect(() => {
-    if (!editName || !companions) return;
-    const target = companions.find((c) => c.name === editName);
+    if (!editRef || !companions) return;
+    const target = companions.find((c) => refMatches(editRef, c));
     if (target) setEditing(target);
     setParams({}, { replace: true });
-  }, [editName, companions, setParams]);
+  }, [editRef, companions, setParams]);
 
   const runtimeByPubkey = useMemo(() => {
     const m = new Map<string, RuntimeCompanion>();
@@ -93,7 +94,12 @@ export function CompanionsPage() {
   // A write reloads the bot, so the runtime roster is only correct once it has restarted.
   const refresh = () => {
     reload();
-    window.setTimeout(reloadRuntime, 1200);
+    notifyCompanionsChanged();
+    // The runtime roster only changes once the backend has restarted the companion.
+    window.setTimeout(() => {
+      reloadRuntime();
+      notifyCompanionsChanged();
+    }, 1200);
   };
 
   const removeCompanion = async (c: ConfigCompanion) => {
