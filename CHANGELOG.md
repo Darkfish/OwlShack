@@ -5,6 +5,13 @@ top until tagged.
 
 ## Unreleased
 
+### Fixed
+
+- **The header showed a companion's URL ref instead of its name.** Addressing a companion by
+  `<id>-<slug>` changed what sits in the path, and the header label renders that segment directly —
+  so it read `companions / 2-wes` where it used to read the companion's name. It now resolves the
+  segment the way every other view does, and falls back to the raw segment until the roster loads.
+
 ## v1.4.0-rc.3 — 2026-09-15
 
 A third candidate, and the first carrying schema 14. Since rc.2 the work has been in the console
