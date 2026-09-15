@@ -129,8 +129,8 @@ func (t *TriggerConfig) Validate() error {
 	}
 
 	if t.PathHashSize != nil {
-		if *t.PathHashSize > 4 {
-			return fmt.Errorf("pathHashSize must be 0-4")
+		if *t.PathHashSize > MaxPathHashSize {
+			return fmt.Errorf("pathHashSize must be %d-%d", MirrorIncomingPathHashSize, MaxPathHashSize)
 		}
 		// 0 means "mirror the incoming message". Nothing comes in to mirror on a scheduled or
 		// feed trigger, and silently falling back to the companion's size would leave the config

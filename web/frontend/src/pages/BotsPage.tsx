@@ -15,7 +15,12 @@ import { LoadErrorAlert } from "@/components/LoadErrorAlert";
 import { SectionTitle } from "@/components/SectionTitle";
 import { InlineConfirm } from "@/components/InlineConfirm";
 import { ChannelMultiSelect } from "@/components/ChannelMultiSelect";
-import { Field, SelectField, TextField } from "@/components/ConfigFields";
+import {
+  Field,
+  PATH_HASH_SIZE_OPTIONS,
+  SelectField,
+  TextField,
+} from "@/components/ConfigFields";
 import { StringListField } from "@/components/StringListField";
 import { PeerListField, type PickablePeer } from "@/components/PeerPicker";
 import { Button } from "@/components/ui/button";
@@ -55,10 +60,6 @@ const isFeedType = (t: string) => t === "rss" || t === "cap";
 // that is answering one. Cron and the feeds start the conversation themselves.
 const answersAMessage = (t: string) => t === "group" || t === "dm";
 
-const PATH_HASH_SIZES = [1, 2, 4].map((n) => ({
-  value: String(n),
-  label: `${n} byte${n > 1 ? "s" : ""}`,
-}));
 
 const POLL_UNITS = [
   { value: "m", label: "minutes" },
@@ -749,7 +750,7 @@ function BotEditor({
                 ...(answersAMessage(type)
                   ? [{ value: "0", label: "mirror incoming" }]
                   : []),
-                ...PATH_HASH_SIZES,
+                ...PATH_HASH_SIZE_OPTIONS,
               ]}
               onChange={setPathHashSize}
               hint={pathHashSizeHint}

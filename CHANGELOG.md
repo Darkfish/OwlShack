@@ -15,6 +15,11 @@ top until tagged.
   API rejects it outright so an imported file cannot set it either. The "default" option said
   "default (1)" whichever size the companion actually used; it now names the companion as the
   source and a hint says what that resolves to.
+- **Path hash size is 1-3 bytes everywhere.** The bot form alone offered 4, which Settings, the
+  companion editor and the repeater all rejected — so a bot could be set to a size the companion it
+  transmits through could not be configured for. Bots now use the same list as every other field,
+  and a stored 4 is clamped to 3 by migration: validation covers the whole assembled config on
+  every save, so one left in place would have blocked unrelated config changes.
 
 ### Fixed
 

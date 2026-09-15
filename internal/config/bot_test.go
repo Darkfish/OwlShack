@@ -43,6 +43,7 @@ func TestTriggerConfig_MirrorPathHashSizeNeedsAnIncomingMessage(t *testing.T) {
 	t.Parallel()
 	mirror := uint8(MirrorIncomingPathHashSize)
 	twoBytes := uint8(2)
+	over := uint8(MaxPathHashSize + 1)
 
 	for _, tc := range []struct {
 		name    string
@@ -55,6 +56,7 @@ func TestTriggerConfig_MirrorPathHashSizeNeedsAnIncomingMessage(t *testing.T) {
 		{"rss cannot mirror", TriggerConfig{Type: "rss", Template: "x", URL: "https://example.org/f.xml", Contacts: &[]string{"aa"}, PathHashSize: &mirror}, true},
 		{"cap cannot mirror", TriggerConfig{Type: "cap", Template: "x", URL: "https://example.org/f.xml", Contacts: &[]string{"aa"}, PathHashSize: &mirror}, true},
 		{"cron takes a fixed size", TriggerConfig{Type: "cron", Template: "x", Schedule: "@every 1h", Contacts: &[]string{"aa"}, PathHashSize: &twoBytes}, false},
+		{"past the maximum is rejected", TriggerConfig{Type: "dm", Template: "x", PathHashSize: &over}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.cfg.Validate()
