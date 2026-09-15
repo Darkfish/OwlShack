@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCompanionRef } from "@/hooks/useCompanions";
+import { useResume } from "@/lib/resume";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { PageHeader } from "@/components/PageHeader";
 import { ConnectionPill, PeerTypePill } from "@/components/StatusIndicator";
@@ -504,7 +505,6 @@ export function CompanionDetailPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
-  const wasConnectedRef = useRef(false);
   // Channels whose full history has been paged back to the start — stop fetching.
   const reachedStartRef = useRef<Set<string>>(new Set());
   // Set while a scroll-up prepend is in flight, so auto-scroll-to-bottom skips.
@@ -615,25 +615,32 @@ export function CompanionDetailPage() {
     }
   }, [sort]);
 
-  const loadConversations = useCallback(async (): Promise<Conversation[]> => {
-    if (!companionRef) return [];
-    setLoadingList(true);
-    setListError(null);
-    try {
-      const r = await fetch(
-        `/api/companions/${encodeURIComponent(companionRef)}/conversations`,
-      );
-      if (!r.ok) throw new Error("conversations");
-      const data: Conversation[] = (await r.json()) || [];
-      setConversations(data);
-      return data;
-    } catch {
-      setListError("Failed to load conversations");
-      return [];
-    } finally {
-      setLoadingList(false);
-    }
-  }, [companionRef]);
+  // silent skips the skeleton, so a refresh behind the user's back never blanks the thread list.
+  const loadConversations = useCallback(
+    async (silent = false): Promise<Conversation[]> => {
+      if (!companionRef) return [];
+      if (!silent) {
+        setLoadingList(true);
+        setListError(null);
+      }
+      try {
+        const r = await fetch(
+          `/api/companions/${encodeURIComponent(companionRef)}/conversations`,
+        );
+        if (!r.ok) throw new Error("conversations");
+        const data: Conversation[] = (await r.json()) || [];
+        setConversations(data);
+        setListError(null);
+        return data;
+      } catch {
+        if (!silent) setListError("Failed to load conversations");
+        return [];
+      } finally {
+        if (!silent) setLoadingList(false);
+      }
+    },
+    [companionRef],
+  );
 
   useEffect(() => {
     loadConversations();
@@ -988,7 +995,7 @@ export function CompanionDetailPage() {
       }
 
       if (!knownChannelsRef.current.has(incoming.channel)) {
-        loadConversations();
+        loadConversations(true);
         return;
       }
 
@@ -1026,13 +1033,14 @@ export function CompanionDetailPage() {
 
   const { connected } = useWebSocket(["messages"], handleWsMessage);
 
-  useEffect(() => {
-    if (connected && !wasConnectedRef.current) {
-      // Backfill what we missed; other channels refresh on re-open.
+  // A gap in the stream leaves this thread and the roster short of whatever arrived during it.
+  // Other channels catch up on re-open, via the same backfill.
+  useResume(
+    useCallback(() => {
       if (activeChannel) backfillMessages(activeChannel);
-    }
-    wasConnectedRef.current = connected;
-  }, [connected, activeChannel, backfillMessages]);
+      loadConversations(true);
+    }, [activeChannel, backfillMessages, loadConversations]),
+  );
 
   const initialScrollDoneRef = useRef(false);
   const lastAutoScrollIdRef = useRef(0);
@@ -1454,7 +1462,7 @@ export function CompanionDetailPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={loadConversations}
+                onClick={() => loadConversations()}
                 className="ml-2 h-7 text-xs uppercase tracking-widest"
               >
                 retry
