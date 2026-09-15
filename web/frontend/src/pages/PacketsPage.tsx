@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, CircleDashed, RefreshCw, Search } from "lucide-react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useApiList } from "@/hooks/useApiList";
+import { useResume } from "@/lib/resume";
 import { HopPath, type PathPeer } from "@/components/HopPath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -169,7 +170,9 @@ export function PacketsPage() {
     loading,
     error,
     reload,
+    refresh,
   } = useApiList<Packet>("/api/packets?limit=100", "Failed to load packets");
+  useResume(refresh);
   const livePackets = items ?? NO_PACKETS;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");

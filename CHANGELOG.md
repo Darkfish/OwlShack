@@ -23,6 +23,18 @@ top until tagged.
 
 ### Fixed
 
+- **A tab that has been asleep catches up instead of needing a reload.** Messages, the thread list,
+  peers, packets and the map are fetched once and then updated only by the socket, so anything that
+  happened while the tab was away was simply absent — and an empty stretch of chat is
+  indistinguishable from a quiet mesh. Waking the tab, coming back online and re-opening a dropped
+  socket now each re-fetch the view behind the user's back: no spinner, no blanked list, and what
+  is on screen stays if the fetch fails. The chat page already backfilled its open thread when the
+  socket reconnected, which left the two cases that actually bite: the thread list, and a socket
+  that stayed open through the sleep while the hub dropped broadcasts it could not queue.
+- **A reconnect can no longer leave two live sockets.** Waking the tab replaces a socket that has
+  already closed, but the old socket's close event still arrived afterwards and cleared the
+  reference to its replacement, so the retry timer opened a second one. The close of a socket that
+  has been replaced is now ignored.
 - **A new message no longer jumps the view unless the reader is at the end of the thread.** Reading
   back through history, an arriving message leaves the scroll where it is and a jump-to-latest pill
   counts what has landed; clicking it, or scrolling back to the end, clears it. Posting still takes
