@@ -5,8 +5,32 @@ top until tagged.
 
 ## Unreleased
 
+## v1.4.0-rc.3 — 2026-09-15
+
+A third candidate, and the first carrying schema 14. Since rc.2 the work has been in the console
+rather than on the wire: a companion's URL survives a rename, a thread follows new messages only
+when the reader is at the end of it, a tab that has been asleep catches up instead of needing a
+reload, and a bot's path hash size offers the same 1-3 bytes as the rest of the app. A security
+pass over the first of those found route confusion in the new path rewrite, fixed before release.
+
+Unchanged from rc.2, and still the reason this is not v1.4.0: the room keep-alive has never run
+against a live room, and no feed trigger has yet transmitted from real hardware.
+
+Baseline `v1.3.1` · schema `user_version` 14
+
 ### Changed
 
+- **Companion URLs no longer break when a companion is renamed.** A companion is now addressed by
+  `/companions/<id>-<slug>` — the id is the authority and the slug is only there to keep the link
+  readable, so a stale slug still resolves. Renaming previously left every open tab and bookmark on
+  a dead URL, because the name was both the display label and the key in all 49 runtime API routes;
+  `/companions/%F0%9F%90%B6Akl/contacts` returned `companion not found` the instant the rename
+  landed, and reloading could not help because the stale name was in the address bar. Plain-name
+  URLs still resolve, so existing bookmarks and installed PWAs keep working.
+- `GET /api/companions` now includes `id`, and the `messages` WebSocket payload now carries
+  `companionId` alongside `companion`. The live-message filter matches on the id, which is known
+  from the URL on the first render and cannot change under a rename; it falls back to the name when
+  a payload has no id rather than dropping the message.
 - **A bot's path hash size no longer offers "mirror incoming" where nothing comes in.** Mirroring
   answers with the size the message arrived on, which only means something for a group or DM
   trigger; cron, RSS and CAP start the conversation themselves and silently fell back to the
@@ -23,6 +47,13 @@ top until tagged.
 
 ### Fixed
 
+- **A companion path could be steered onto a route it never addressed.** The new ref rewrite split
+  and rebuilt the *decoded* path, so an encoded slash inside the segment passed for a separator:
+  `/api/companions/1-a%2Frepeaters%2FDEAD/cli` addresses `{name}/cli` and should 404, but reached
+  the repeater CLI handler. The substituted name had the same flaw in reverse — nothing constrains
+  a companion name, so one containing `/` spread across segments and both hijacked routes and made
+  its own companion unreachable. Segments are now split and rebuilt on the escaped path. Found
+  before release; no shipped version is affected.
 - **A tab that has been asleep catches up instead of needing a reload.** Messages, the thread list,
   peers, packets and the map are fetched once and then updated only by the socket, so anything that
   happened while the tab was away was simply absent — and an empty stretch of chat is
@@ -30,7 +61,8 @@ top until tagged.
   socket now each re-fetch the view behind the user's back: no spinner, no blanked list, and what
   is on screen stays if the fetch fails. The chat page already backfilled its open thread when the
   socket reconnected, which left the two cases that actually bite: the thread list, and a socket
-  that stayed open through the sleep while the hub dropped broadcasts it could not queue.
+  that stayed open through the sleep while the hub dropped broadcasts it could not queue. The
+  dashboard, traces, monitoring, discover and repeater pages are not yet covered.
 - **A reconnect can no longer leave two live sockets.** Waking the tab replaces a socket that has
   already closed, but the old socket's close event still arrived afterwards and cleared the
   reference to its replacement, so the retry timer opened a second one. The close of a socket that
@@ -46,6 +78,11 @@ top until tagged.
   auto-scroll read as new traffic. Updates now apply only to the thread they name, and one that
   changes nothing keeps the existing array. This was the suspected trigger for the report above;
   it could not be confirmed on a local mesh, so the entry above is what the fix rests on.
+- **The sidebar kept showing a companion's old name until the page was reloaded.** Config has no
+  WebSocket topic, and the shell only refetched the roster when navigating to or from
+  `/companions` — which a rename from the dialog on that page never does. Every companion mutation
+  now notifies the cached rosters, so the sidebar, the shared companion list and the links built
+  from them update in place.
 
 ## v1.4.0-rc.2 — 2026-09-14
 
