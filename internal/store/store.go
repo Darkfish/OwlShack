@@ -217,6 +217,7 @@ var migrations = []func(context.Context, dbExecer) error{
 	migrateV9,   // 11 — repeater.admin_password backfilled off blank (blank granted admin)
 	migrateV10,  // 12 — companions.dm_policy + dm_allow (who may DM this companion)
 	migrateV11,  // 13 — triggers.url (the feed an rss/cap trigger polls)
+	migrateV12,  // 14 — clamp triggers.path_hash_size to the 3-byte maximum the rest of the app uses
 }
 
 // dbExecer is the subset of *sql.DB / *sql.Tx a migration needs.
@@ -642,6 +643,14 @@ func migrateV10(ctx context.Context, db dbExecer) error {
 		}
 	}
 	return nil
+}
+
+// migrateV12 clamps trigger path hash sizes to the 3-byte maximum every other config already used.
+// The bot form alone offered 4, and Config.Validate now rejects it — which would wall off every
+// later config save, since a save validates the whole assembled config, not just what changed.
+func migrateV12(ctx context.Context, db dbExecer) error {
+	_, err := db.ExecContext(ctx, `UPDATE triggers SET path_hash_size = 3 WHERE path_hash_size > 3`)
+	return err
 }
 
 // migrateV11 adds the feed URL an rss or cap trigger polls; empty for every trigger type that has none.
