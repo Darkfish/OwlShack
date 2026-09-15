@@ -5,6 +5,15 @@ top until tagged.
 
 ## Unreleased
 
+## v1.4.0-rc.4 — 2026-09-15
+
+rc.3 plus one fix: the header read a companion's URL ref where its name belongs, a regression from
+addressing companions by `<id>-<slug>`. Nothing else changed — same schema, same binaries
+otherwise, and the two things still keeping this off v1.4.0 are unchanged: the room keep-alive has
+never run against a live room, and no feed trigger has yet transmitted from real hardware.
+
+Baseline `v1.3.1` · schema `user_version` 14
+
 ### Fixed
 
 - **The header showed a companion's URL ref instead of its name.** Addressing a companion by
