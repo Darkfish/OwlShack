@@ -172,6 +172,43 @@ chmod +x OwlShack-linux-arm64
 sudo mv OwlShack-linux-arm64 /usr/local/bin/OwlShack
 ```
 
+### Debian / Ubuntu / Raspberry Pi OS
+
+The installer picks the right package for the machine, installs it, and leaves
+OwlShack running under systemd — nothing has to stay in a terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/meshcore-go/OwlShack/dev/packaging/install.sh | sudo sh
+```
+
+Or take the `.deb` for `amd64`, `arm64`, `armhf` or `i386` from the
+[Releases](https://github.com/meshcore-go/OwlShack/releases) page yourself:
+
+```bash
+sudo apt install ./owlshack_1.4.0_arm64.deb
+systemctl status owlshack
+```
+
+On a Raspberry Pi, `dpkg --print-architecture` is the answer that matters, not
+the model: a 64-bit Pi OS reports `arm64`, a 32-bit one `armhf`. The `armhf`
+package is built for ARMv6, so it runs on every Pi back to the Zero and the
+original Model B.
+
+The service runs as the `owlshack` user (added to `dialout`, plus `spi` and
+`gpio` when the host has them), keeps its database in `/var/lib/owlshack`, and
+serves `http://<host>:8860` — not 8080, which `http-alt` shares with half the
+homelab. The package sets that as `LISTEN_DEFAULT` in `/etc/default/owlshack`,
+which seeds the database on first run; after that the address belongs to the
+Settings page like any other install. The same file carries `HOST`, `PORT`, `TZ`
+and extra flags — `HOST` and `PORT` pin the address on every start, so use them
+only when the UI should not be able to move it. To build one from
+a checkout: `./build.sh && packaging/deb/build-deb.sh ./OwlShack amd64`.
+
+`sudo apt remove owlshack` keeps `/var/lib/owlshack`, so reinstalling resumes
+with the same identity and history. `sudo apt purge owlshack` deletes it, as a
+purge should — and that directory is the only copy of the node's keys, contacts
+and messages, so take a backup from the Settings page first.
+
 ### Docker
 
 Published to `ghcr.io/meshcore-go/owlshack` for `linux/386`, `amd64`,
@@ -417,10 +454,13 @@ Only RX packets are published, never TX. See
 |---|---|
 | `HOST` | Bind host. Unset means all interfaces |
 | `PORT` | Bind port. Unset means the stored value, then `8080` |
+| `LISTEN_DEFAULT` | Seeds the stored listen address on first run only; Settings owns it after |
 | `TZ` | The zone the process treats as local, e.g. `Pacific/Auckland` |
 
 `HOST` and `PORT` override the stored listen address at startup (env > stored
 config > `:8080`), which is handy for Docker and PaaS: `PORT=4432 ./OwlShack`.
+An address that cannot be bound is fatal — the process exits rather than run on
+with no web UI, so a service manager can restart it until the address exists.
 
 `TZ` matters wherever a time is rendered without an explicit zone, which in
 practice means bot templates and log lines. **A container has no local zone, so
