@@ -5,6 +5,33 @@ top until tagged.
 
 ## Unreleased
 
+### Added
+
+- **Debian packages and a one-line installer.** `.deb` for amd64, arm64, armhf and i386, built
+  from the release binaries and attached to every tag. Installs `/usr/bin/owlshack`, a systemd
+  unit running as the `owlshack` user (in `dialout`, plus `spi`/`gpio` where present) with its
+  database in `/var/lib/owlshack`, and `/etc/default/owlshack` for `PORT`/`HOST`/`TZ`/flags. The
+  packaged service listens on **8860**, not the crowded 8080; the binary and the Docker image are
+  unchanged.
+  `packaging/install.sh` picks the package for the host and installs it; `packaging/deb/build-deb.sh`
+  builds one from a checkout. `apt remove` keeps the database, `apt purge` deletes it.
+- **`LISTEN_DEFAULT` seeds the listen address on first run.** It writes the address into the
+  database when none is configured and then leaves it alone, so the Settings page still owns it —
+  which is how the Debian package can default to 8860 without the UI's port field going dead.
+  `HOST` and `PORT` are unchanged and still pin the address on every start.
+- **The armhf package is ARMv6, so a Pi Zero can run it.** Raspberry Pi OS reports `armhf` on an
+  ARMv6 Pi as well as an ARMv7 one, and a GOARM=7 build installs there cleanly and then dies with
+  SIGILL. `build-deb.sh` now disassembles any armhf binary and refuses it if ARMv7-only
+  instructions are present.
+
+### Fixed
+
+- **A web listen address that cannot be bound is fatal.** The listener is bound before the
+  server goroutine starts, and a later `Serve` error ends the run too. Until now a failed bind
+  logged one line and the process carried on: the node kept running, `systemctl` reported
+  `active`, and there was no web UI. Under systemd the unit now restarts every 5s until the
+  address exists, which also covers an address that appears late in boot.
+
 ## v1.4.0-rc.4 — 2026-09-15
 
 rc.3 plus one fix: the header read a companion's URL ref where its name belongs, a regression from
