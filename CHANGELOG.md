@@ -5,6 +5,22 @@ top until tagged.
 
 ## Unreleased
 
+## v1.4.0-rc.5 — 2026-09-16
+
+rc.4 plus native packaging: a `.deb` that installs OwlShack as a systemd service, for everyone who
+does not want Docker. It brought two app changes with it — a listen address that cannot be bound
+is now fatal instead of leaving a node that reports `active` with no web UI, and `LISTEN_DEFAULT`
+seeds the stored address so a package can choose the port a fresh install starts on without taking
+that field away from the Settings page. Same schema as rc.4, same binaries otherwise.
+
+The packages install and purge cleanly on Debian 12 and 13 and on Ubuntu 22.04 and 24.04, but no
+ARM build has executed anywhere: the armhf package is built for ARMv6 and checked by disassembly,
+never run on a Pi. Treat the first Pi Zero install as the test. The two things keeping this off
+v1.4.0 are unchanged: the room keep-alive has never run against a live room, and no feed trigger
+has yet transmitted from real hardware.
+
+Baseline `v1.3.1` · schema `user_version` 14
+
 ### Added
 
 - **Debian packages and a one-line installer.** `.deb` for amd64, arm64, armhf and i386, built
