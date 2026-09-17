@@ -284,6 +284,8 @@ type SettingsInput struct {
 	TX           *int     `json:"tx"`
 	ListenAddr   *string  `json:"listenAddr"`
 	MapTileKey   *string  `json:"mapTileKey"` // omit = keep, "" = clear
+	// ModemToken is the openHop modem's access token: omit = keep the stored one, "" = clear it.
+	ModemToken *string `json:"modemToken"`
 	PathHashSize *int     `json:"pathHashSize"`
 	// DutyCycle is a TX airtime cap percentage (0 < pct <= 100); null means the default, not "keep".
 	DutyCycle     *float64 `json:"dutyCycle"`
