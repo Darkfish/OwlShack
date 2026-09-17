@@ -5,6 +5,60 @@ top until tagged.
 
 ## Unreleased
 
+## v1.4.0-rc.6 — 2026-09-17
+
+rc.5 plus a third radio backend: **openHop Modem firmware**, over the network or USB, alongside
+MeshCore KISS and a bare SX126x on SPI. It has run against real hardware here — handshake, receive,
+transmit, reconnect and listen-before-talk — which is more than the armhf package can say.
+
+Adding a transport that reconnects itself surfaced three things that were already wrong and are
+fixed here: `/api/health` called the radio connected whenever a modem object existed, the stored
+`connectionType` could contradict the connection string it is supposed to describe, and the
+settings round-trip test only ever exercised an INSERT, so a column dropped from the upsert's
+`ON CONFLICT` list was invisible — for any column, not just the new one.
+
+Schema moves to `user_version` 15 for one new column. The two things keeping this off v1.4.0 are
+unchanged: the room keep-alive has never run against a live room, and no feed trigger has yet
+transmitted from real hardware.
+
+Baseline `v1.3.1` · schema `user_version` 15
+
+### Added
+
+- **openHop Modem support.** Set the connection to `openhop://host:port` (or `openhop:///dev/tty…`)
+  and pick "openHop Modem" as the radio backend. The firmware owns the radio and does its own
+  channel-activity detection, so OwlShack only frames packets; the driver reconnects on its own and
+  re-pushes the radio configuration afterwards, because the modem may have rebooted. The preamble is
+  derived from the spreading factor rather than taken from openHop's own default, which no MeshCore
+  node would hear.
+  Verified against an openHop Modem on WiFi: handshake and every query, receive with correct SNR and
+  RSSI, a self-advert on air, peers discovered, a reconfigure mid-run, and a dropped link recovering
+  through the full backoff schedule with re-authentication. Listen-before-talk was exercised by
+  lowering the modem's CAD threshold until a quiet channel reads busy — both the host retry loop and
+  the modem's own `ERR_CHANNEL_BUSY` refusal behave. **openHop over serial is untested**: no such
+  hardware here.
+- **`modemToken` setting.** The openHop access token, stored in its own column and treated as a
+  password: reads return `modemTokenSet` and never the value, a write omits it to keep the stored
+  one, and the UI field is masked and write-only. It is deliberately not part of the connection
+  string, which config reads return in full.
+
+### Fixed
+
+- **`/api/health` reported a radio that was not there as connected.** `connected` meant "a modem
+  object exists", which tracks the link only for transports OwlShack tears down and rebuilds. A
+  self-reconnecting modem outlives its link, so a radio that had been unreachable for minutes still
+  read `status: ok, problems: []`. Health now asks the modem when it can answer one.
+- **The stored `connectionType` could disagree with the connection string.** Only the connection
+  string decides which driver loads, so the label is now derived from it on every write instead of
+  being taken from the caller — a config naming one backend and pointing at another no longer
+  persists the contradiction.
+- **The settings round-trip test could not see a dropped column.** It inserted once, so it only
+  covered the INSERT arm of the upsert; removing a column from the `ON CONFLICT` list — the arm
+  every save after the first one takes — left it green. It now writes twice.
+- **The armhf guard in `build-deb.sh` was inert.** See the correction under rc.5: it disassembled a
+  stripped binary, got nothing, and passed. It now reads the `GOARM` the toolchain records, which
+  survives stripping, and fails closed when it cannot read one.
+
 ## v1.4.0-rc.5 — 2026-09-16
 
 rc.4 plus native packaging: a `.deb` that installs OwlShack as a systemd service, for everyone who
@@ -37,8 +91,11 @@ Baseline `v1.3.1` · schema `user_version` 14
   `HOST` and `PORT` are unchanged and still pin the address on every start.
 - **The armhf package is ARMv6, so a Pi Zero can run it.** Raspberry Pi OS reports `armhf` on an
   ARMv6 Pi as well as an ARMv7 one, and a GOARM=7 build installs there cleanly and then dies with
-  SIGILL. `build-deb.sh` now disassembles any armhf binary and refuses it if ARMv7-only
-  instructions are present.
+  SIGILL. `build-deb.sh` refuses an armhf binary that is not ARMv6. **Correction (rc.6):** the
+  check shipped in rc.5 disassembled the binary, which cannot work on a release build — those are
+  stripped, `go tool objdump` fails, and the instruction count came back zero, so the guard passed
+  no matter what. The rc.5 armhf package is genuinely ARMv6, verified separately; the guard just
+  was not the reason. It reads the recorded `GOARM` from rc.6 on.
 
 ### Fixed
 
