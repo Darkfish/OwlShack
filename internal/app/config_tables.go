@@ -45,6 +45,13 @@ func ptrToStr(p *string) string {
 	return *p
 }
 
+func strDeref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
 func derefSlice(p *[]string) []string {
 	if p == nil {
 		return nil
@@ -121,6 +128,7 @@ func assembleFromRows(rows *configRows) *config.Config {
 		TX:             intToU8Ptr(s.TX),
 		ListenAddr:     s.ListenAddr,
 		MapTileKey:     s.MapTileKey,
+		ModemToken:     s.ModemToken,
 		PathHashSize:   s.PathHashSize,
 		DutyCycle:      s.DutyCyclePct,
 		SetupComplete:  boolPtr(s.SetupComplete),
@@ -278,9 +286,12 @@ func hasMqttConfig(mq *store.MqttSettings, brokers []store.Broker) bool {
 
 // writeConfigToTables MUST be called inside store.WriteSync — it issues many writes.
 func writeConfigToTables(ctx context.Context, st *store.Store, cfg *config.Config) error {
+	// The connection string is what Setup switches on, so the stored backend is derived from it
+	// rather than trusted: an imported config that names one and points at another must not persist
+	// the contradiction.
 	connType := "kiss"
-	if cfg.ConnectionType != nil && *cfg.ConnectionType != "" {
-		connType = *cfg.ConnectionType
+	if scheme, _, ok := config.ParseConnection(strDeref(cfg.Connection)); ok && scheme != "serial" && scheme != "tcp" {
+		connType = scheme
 	}
 	if err := st.Settings.Set(ctx, &store.Settings{
 		LogLevel:       cfg.LogLevel,
@@ -295,6 +306,7 @@ func writeConfigToTables(ctx context.Context, st *store.Store, cfg *config.Confi
 		TX:             u8ToIntPtr(cfg.TX),
 		ListenAddr:     cfg.ListenAddr,
 		MapTileKey:     cfg.MapTileKey,
+		ModemToken:     cfg.ModemToken,
 		PathHashSize:   cfg.PathHashSize,
 		DutyCyclePct:   cfg.DutyCycle,
 		SetupComplete:  cfg.SetupComplete != nil && *cfg.SetupComplete,
