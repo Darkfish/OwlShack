@@ -77,21 +77,24 @@ is enough to run a companion, a repeater and the console at once.
 ### Radio interfaces
 
 Set on the Settings page: `serial://` or `tcp://` for a MeshCore firmware node
-(KISS), `spi://` plus a board to drive a bare radio yourself.
+(KISS), `openhop://` for an openHop Modem over USB or the network, `spi://`
+plus a board to drive a bare radio yourself.
 
 > [!CAUTION]
-> **Which of the two you need.** SPI means this process is the radio driver: it
+> **Which one you need.** SPI means this process is the radio driver: it
 > clocks an SX126x over the host's own bus and toggles its reset, busy and
 > RF-switch lines itself, so the board has to be one it holds a pin map for.
 > Everything else (any other chip family, a gateway concentrator, a bridge
-> that fakes a bus over USB) belongs on the KISS side, behind MeshCore
-> firmware that already knows its own hardware.
+> that fakes a bus over USB) belongs behind firmware that already knows its
+> own hardware — MeshCore over KISS, or an openHop Modem.
 
 | Interface | Status |
 |---|---|
 | Native SX126x on the host SPI bus | Supported |
 | MeshCore firmware over USB serial (KISS) | Supported |
 | MeshCore firmware over TCP (KISS) | Supported |
+| openHop Modem over the network | Supported |
+| openHop Modem over USB serial | Untested — no hardware here |
 | SX127x on SPI | Not supported |
 | SX1302 / SX1303 concentrator boards | Not supported |
 | USB-to-SPI bridges (CH341 and similar) | Not supported |
@@ -301,9 +304,10 @@ UI.
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `connection` | `serial:///dev/ttyACM0`, `tcp://host:port`, or `spi://` | `serial:///dev/ttyACM0` |
-| `connectionType` | `kiss` (MeshCore firmware) or `spi` (bare SX1262) | `kiss` |
+| `connection` | `serial:///dev/ttyACM0`, `tcp://host:port`, `openhop://host:port`, or `spi://` | `serial:///dev/ttyACM0` |
+| `connectionType` | Derived from `connection`, not set by hand: `kiss`, `openhop` or `spi` | `kiss` |
 | `spiBoard` | Board id from the registry, required for `spi://` | none |
+| `modemToken` | openHop modem access token; write-only, reads report only whether one is stored | none |
 | `baudRate` | Serial baud rate | `115200` |
 | `freq` | Frequency in MHz | `917.375` |
 | `bw` | Bandwidth in kHz | `62.50` |
