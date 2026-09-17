@@ -15,6 +15,8 @@ export interface Settings {
   tx: number | null;
   listenAddr: string | null;
   mapTileKey: string | null;
+  // The openHop modem token is a secret: reads report only whether one is stored.
+  modemTokenSet: boolean;
   pathHashSize: number | null;
   // TX airtime cap as a percentage, the unit the firmware uses. null = 50%.
   dutyCycle: number | null;
@@ -233,6 +235,7 @@ export interface SettingsInput {
   tx?: number | null;
   listenAddr?: string | null;
   mapTileKey?: string | null; // omit = keep, "" = clear
+  modemToken?: string; // omit = keep the stored token
   pathHashSize?: number | null;
   dutyCycle?: number | null;
   // Only set by the first-run wizard; omit elsewhere so a radio edit never re-opens setup.

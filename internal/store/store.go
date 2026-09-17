@@ -218,6 +218,7 @@ var migrations = []func(context.Context, dbExecer) error{
 	migrateV10,  // 12 — companions.dm_policy + dm_allow (who may DM this companion)
 	migrateV11,  // 13 — triggers.url (the feed an rss/cap trigger polls)
 	migrateV12,  // 14 — clamp triggers.path_hash_size to the 3-byte maximum the rest of the app uses
+	migrateV13,  // 15 — settings.modem_token (the openHop modem's access token)
 }
 
 // dbExecer is the subset of *sql.DB / *sql.Tx a migration needs.
@@ -650,6 +651,13 @@ func migrateV10(ctx context.Context, db dbExecer) error {
 // later config save, since a save validates the whole assembled config, not just what changed.
 func migrateV12(ctx context.Context, db dbExecer) error {
 	_, err := db.ExecContext(ctx, `UPDATE triggers SET path_hash_size = 3 WHERE path_hash_size > 3`)
+	return err
+}
+
+// migrateV13 adds the openHop modem's access token. It is a password, so it lives in its own column
+// rather than inside the connection string, which the config REST reads hand out in full.
+func migrateV13(ctx context.Context, db dbExecer) error {
+	_, err := db.ExecContext(ctx, `ALTER TABLE settings ADD COLUMN modem_token TEXT`)
 	return err
 }
 

@@ -12,9 +12,11 @@ they need (`hooks/useApiObject` for single-row settings/mqtt, `hooks/useApiList`
 for the lists) and write through `lib/configApi.ts`. There is **no
 whole-document fetch or PUT** — the old `GET/PUT /api/config` (and
 `hooks/useConfig.ts`) were removed because the GET shipped every secret to the
-browser. Read DTOs are **secret-redacted** (`privateKeySet` / `passwordSet`
-booleans); a write **omits** a secret field to keep the stored value, sends it
-to set, sends `""` to clear.
+browser. Read DTOs are **secret-redacted** (`privateKeySet` / `passwordSet` /
+`modemTokenSet` booleans); a write **omits** a secret field to keep the stored
+value, sends it to set, sends `""` to clear. The openHop modem token is one of
+these: it lives in `settings.modem_token`, never inside the connection string,
+because `GET /api/config/settings` returns that string in full.
 
 Server-side, every write goes through `backend.configMutate`
 (`internal/app/config_rest.go`): inside one `WriteSync` it loads the current
@@ -346,7 +348,7 @@ GET|DELETE /api/companions/{name}/rooms/{pubkey}/session
 # assembled config before persisting (by surrogate id) and reload. There is NO
 # whole-document /api/config endpoint — it was removed (it leaked secrets);
 # unmatched /api/* paths 404.
-GET  /api/config/settings                                    (radio/connection/log + setupComplete)
+GET  /api/config/settings                                    (radio/connection/log + setupComplete; modemTokenSet, never the token)
 PUT  /api/config/settings
 GET  /api/config/mqtt                                        (feed settings; node by companion id)
 PUT  /api/config/mqtt
