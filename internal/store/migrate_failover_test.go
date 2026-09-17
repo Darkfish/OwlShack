@@ -7,7 +7,7 @@ import (
 
 func TestStore_UpgradeFailoverAndOpenHop(t *testing.T) {
 	t.Parallel()
-	for _, source := range []string{"pre-feature", "upstream-v15", "failover-v15"} {
+	for _, source := range []string{"pre-feature", "upstream-v15"} {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
@@ -30,10 +30,8 @@ func TestStore_UpgradeFailoverAndOpenHop(t *testing.T) {
 			`); err != nil {
 				t.Fatal(err)
 			}
-			var wantPattern, wantToken string
-			var wantTimeout int64
-			switch source {
-			case "upstream-v15":
+			var wantToken string
+			if source == "upstream-v15" {
 				if _, err := db.ExecContext(ctx, `
 					ALTER TABLE settings ADD COLUMN modem_token TEXT;
 					UPDATE settings SET modem_token = 'saved-token';
@@ -42,16 +40,6 @@ func TestStore_UpgradeFailoverAndOpenHop(t *testing.T) {
 					t.Fatal(err)
 				}
 				wantToken = "saved-token"
-			case "failover-v15":
-				if _, err := db.ExecContext(ctx, `
-					ALTER TABLE triggers ADD COLUMN failover_pattern TEXT NOT NULL DEFAULT '';
-					ALTER TABLE triggers ADD COLUMN failover_timeout INTEGER NOT NULL DEFAULT 0;
-					UPDATE triggers SET failover_pattern = '^pong$', failover_timeout = 5;
-					PRAGMA user_version = 15;
-				`); err != nil {
-					t.Fatal(err)
-				}
-				wantPattern, wantTimeout = "^pong$", 5
 			}
 			if err := db.Close(); err != nil {
 				t.Fatal(err)
@@ -87,7 +75,7 @@ func TestStore_UpgradeFailoverAndOpenHop(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if trigger.Template != "reply" || trigger.FailoverPattern != wantPattern || trigger.FailoverTimeout != wantTimeout {
+				if trigger.Template != "reply" || trigger.FailoverPattern != "" || trigger.FailoverTimeout != 0 {
 					t.Fatalf("trigger settings after upgrade: %+v", trigger)
 				}
 				if err := st.Close(); err != nil {

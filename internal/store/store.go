@@ -219,7 +219,7 @@ var migrations = []func(context.Context, dbExecer) error{
 	migrateV11,  // 13 — triggers.url (the feed an rss/cap trigger polls)
 	migrateV12,  // 14 — clamp triggers.path_hash_size to the 3-byte maximum the rest of the app uses
 	migrateV13,  // 15 — settings.modem_token (the openHop modem's access token)
-	migrateV14,  // 16 — group bot failover and compatibility with the feature branch's version 15
+	migrateV14,  // 16 — optional group bot failover
 }
 
 // dbExecer is the subset of *sql.DB / *sql.Tx a migration needs.
@@ -719,30 +719,14 @@ func migrateV6(ctx context.Context, db dbExecer) error {
 	return nil
 }
 
-// migrateV14 reconciles upstream and feature databases that used version 15 for different columns.
+// migrateV14 adds optional group bot failover.
 func migrateV14(ctx context.Context, db dbExecer) error {
-	for _, col := range []struct{ table, name, ddl string }{
-		{"settings", "modem_token", `ALTER TABLE settings ADD COLUMN modem_token TEXT`},
-		{"triggers", "failover_pattern", `ALTER TABLE triggers ADD COLUMN failover_pattern TEXT NOT NULL DEFAULT ''`},
-		{"triggers", "failover_timeout", `ALTER TABLE triggers ADD COLUMN failover_timeout INTEGER NOT NULL DEFAULT 0`},
+	for _, q := range []string{
+		`ALTER TABLE triggers ADD COLUMN failover_pattern TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE triggers ADD COLUMN failover_timeout INTEGER NOT NULL DEFAULT 0`,
 	} {
-		rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?) WHERE name = ?`, col.table, col.name)
-		if err != nil {
+		if _, err := db.ExecContext(ctx, q); err != nil {
 			return err
-		}
-		exists := rows.Next()
-		err = rows.Err()
-		closeErr := rows.Close()
-		if err != nil {
-			return err
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-		if !exists {
-			if _, err := db.ExecContext(ctx, col.ddl); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
